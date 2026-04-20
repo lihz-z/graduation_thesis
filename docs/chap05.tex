@@ -50,7 +50,7 @@
 	\caption{Jetson Orin 部署环境与测试设置}
 	\label{tab:orin_environment_real}
 	\small
-	\begin{tabularx}{\textwidth}{@{}YYY@{}}
+	\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l l l @{}}
 		\toprule
 		项目 & 取值 & 来源 \\
 		\midrule
@@ -63,7 +63,7 @@
 		Input Resolution & 320 $\times$ 800 & deployment config \\
 		Batch Size & 1 & benchmark setup \\
 		\bottomrule
-	\end{tabularx}
+	\end{tabular*}
 \end{table}
 
 \subsection{部署链路的工程实现要点}
@@ -84,8 +84,8 @@
 	\centering
 	\caption{部署阶段关键工件及其文件规模}
 	\label{tab:deployment_artifacts_real}
-	\footnotesize
-	\begin{tabularx}{\textwidth}{l l c l}
+	\small
+	\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l l c @{}}
 		\toprule
 		工件 & 类型 & 大小（MB） \\
 		\midrule
@@ -95,7 +95,7 @@
 		\texttt{clrnet\_da\_only\_int8.engine} & TensorRT INT8 引擎 & 24.505 \\
 		\texttt{clrnet\_da\_only\_int8.calib} & INT8 校准缓存 & 0.024 \\
 		\bottomrule
-	\end{tabularx}
+	\end{tabular*}
 \end{table}
 
 
@@ -126,7 +126,7 @@
 	\caption{三种已完成训练配置在RainLane测试集上的整体性能对比}
 	\label{tab:overall_comparison}
 	\small
-	\begin{tabularx}{\textwidth}{@{}YYYY@{}}
+		\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l c c c @{}}
 		\toprule
 		方法 & F1分数（\%） & 精确率（\%） & 召回率（\%） \\
 		\midrule
@@ -134,7 +134,7 @@
 		CLRNet + Frequency Gate & 59.65 & 59.43 & 59.88 \\
 		CLRNet + FGM & 59.70 & 59.48 & 59.93 \\
 		\bottomrule
-	\end{tabularx}
+	\end{tabular*}
 \end{table}
 
 从表中可以看出，两种改进配置均较基线取得了正向收益。其中，Frequency Gate 对整体 F1 带来了直接提升，完整 FGM 则在 Precision 和 Recall 两项指标上同时优于基线，说明本文提出的抗干扰设计在 RainLane 这类退化较明显的数据上是有效的。
@@ -146,7 +146,7 @@
 	\caption{本文方法与代表性车道线检测方法的整体性能对比}
 	\label{tab:overall_method_comparison}
 	\small
-	\begin{tabularx}{\textwidth}{@{}YYYY@{}}
+	\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l c c c @{}}
 		\toprule
 		方法 & F1分数（\%） & 精确率（\%） & 召回率（\%） \\
 		\midrule
@@ -157,7 +157,7 @@
 		DLNet & 58.03 & 58.46 & 57.60 \\
 		CLRNet-FGM & 59.70 & 59.48 & 59.93 \\
 		\bottomrule
-	\end{tabularx}
+	\end{tabular*}
 \end{table}
 
 从表中可以看出，随着方法从早期分割式结构逐步发展到跨层细化和方向感知特征融合，整体 F1 呈现出较为明显的提升趋势。SCNN 和 LaneATT 的 F1 分别为 $28.11\%$ 和 $34.53\%$，在当前雨天任务中表现相对有限；CLRNet 提升至 $44.12\%$，说明跨层细化机制对车道线结构恢复具有积极作用。进一步地，GSENet 和 DLNet 分别达到 $56.85\%$ 和 $58.03\%$，已能在复杂场景下保持较好的精度水平。相比之下，本文的 CLRNet-FGM 取得了 $59.70\%$ 的 F1，较 DLNet 提升 $1.67$ 个百分点，较 GSENet 提升 $2.85$ 个百分点；同时其 Precision 与 Recall 分别达到 $59.48\%$ 和 $59.93\%$，表明所提出的抗干扰模块在雨天车道线检测任务中具有一定的综合优势。
@@ -171,7 +171,7 @@
 	\caption{五类典型复杂场景下的F1分数对比（\%）}
 	\label{tab:rain_intensity}
 	\small
-	\begin{tabularx}{\textwidth}{@{}YYYYYY@{}}
+	\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l c c c c c @{}}
 		\toprule
 		方法 & 小雨 & 中雨 & 大雨/暴雨 & 强反光/积水 & 明显遮挡 \\
 		\midrule
@@ -179,7 +179,7 @@
 		CLRNet + Frequency Gate & 66.83 & 82.21 & 86.72 & 70.52 & 69.60 \\
 		CLRNet + FGM & 66.37 & 84.14 & 86.37 & 69.83 & 69.42 \\
 		\bottomrule
-	\end{tabularx}
+	\end{tabular*}
 \end{table}
 
 由表可见，三种配置在大雨/暴雨场景中的差异相对较小，而在中雨、强反光/积水和明显遮挡场景中的波动更为明显。这说明真正影响性能差异的并不只是降雨强度本身，而是雨纹叠加、反光伪边缘和遮挡共同造成的结构退化模式。完整 FGM 在中雨场景中略优，而 Frequency Gate 在强反光/积水场景下表现更稳，反映出不同抗干扰机制对不同退化类型具有一定适应差异。
@@ -202,7 +202,7 @@
 	\caption{复杂雨天场景综合指标对比}
 	\label{tab:complex_scene_metrics}
 	\small
-	\begin{tabularx}{\textwidth}{@{}YYYYYYY@{}}
+	\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l c c c c c c @{}}
 		\toprule
 		场景 & \multicolumn{3}{c}{CLRNet（基线）} & \multicolumn{3}{c}{CLRNet-FGM} \\
 		\cmidrule(lr){2-4}\cmidrule(lr){5-7}
@@ -214,7 +214,7 @@
 		强反光/积水 & 40.77 & 34.78 & 37.51 & 47.88 & 41.88 & 44.63 \\
 		明显遮挡 & 37.64 & 32.18 & 34.69 & 44.72 & 38.39 & 41.31 \\
 		\bottomrule
-	\end{tabularx}
+	\end{tabular*}
 \end{table}
 
 
@@ -238,7 +238,7 @@
 	\caption{代表增强模型在不同后端下的实测性能}
 	\label{tab:deployment_placeholder}
 	\small
-	\begin{tabularx}{\textwidth}{@{}YYYYY@{}}
+	\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l c c c c @{}}
 		\toprule
 		部署模式 & 平均延迟（ms） & FPS & 显存占用（MB） & 备注 \\
 		\midrule
@@ -247,7 +247,7 @@
 		TensorRT FP16 & 7.5435 & 132.5641 & 29.3867 & 推荐配置 \\
 		TensorRT INT8 & 5.9027 & 169.4154 & 10.8242 & 极限吞吐 \\
 		\bottomrule
-	\end{tabularx}
+	\end{tabular*}
 \end{table}
 
 表~\ref{tab:deployment_speedup_real} 进一步给出了相对于 PyTorch 基线的加速比、FPS 提升倍数和时延下降比例。可以看到，TensorRT FP16 与 TensorRT INT8 分别实现了 $80.83\%$ 和 $85.00\%$ 的平均时延下降；其中 FP16 方案在速度、显存和精度保持之间更均衡，因此是本文推荐的默认部署后端。
@@ -257,16 +257,16 @@
 	\caption{不同后端相对 PyTorch 的加速效果}
 	\label{tab:deployment_speedup_real}
 	\small
-	\begin{tabularx}{\textwidth}{@{}YYYYYYY@{}}
+	\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l c c c c c c @{}}
 		\toprule
-		模式 & 延迟（ms） & FPS & 峰值显存（MB） & 加速比 & FPS倍数 & 时延下降（\%） \\
+		模式 & 延迟（ms） & FPS & \makecell[c]{峰值显存\\（MB）} & 加速比 & FPS倍数 & \makecell[c]{时延下降\\（\%）} \\
 		\midrule
-		PyTorch FP32 & 39.3418 & 25.4183 & 127.6870 & 1.000 & 1.000 & 0.00 \\
-		ONNX Runtime FP32 & 29.8266 & 33.5271 & 499.7422 & 1.319 & 1.319 & 24.19 \\
-		TensorRT FP16 & 7.5435 & 132.5641 & 29.3867 & 5.215 & 5.215 & 80.83 \\
-		TensorRT INT8 & 5.9027 & 169.4154 & 10.8242 & 6.665 & 6.665 & 85.00 \\
+		\makecell[l]{PyTorch\\FP32} & 39.3418 & 25.4183 & 127.6870 & 1.000 & 1.000 & 0.00 \\
+		\makecell[l]{ONNX Runtime\\FP32} & 29.8266 & 33.5271 & 499.7422 & 1.319 & 1.319 & 24.19 \\
+		\makecell[l]{TensorRT\\FP16} & 7.5435 & 132.5641 & 29.3867 & 5.215 & 5.215 & 80.83 \\
+		\makecell[l]{TensorRT\\INT8} & 5.9027 & 169.4154 & 10.8242 & 6.665 & 6.665 & 85.00 \\
 		\bottomrule
-	\end{tabularx}
+	\end{tabular*}
 \end{table}
 
 图~\ref{fig:deployment_runtime_summary} 左图进一步给出了不同部署模式在时延与吞吐之间的权衡关系，右图则从最小值、中位数和最大值三个统计量刻画了不同后端的时延分布。可以看到，PyTorch 与 ONNX Runtime 的尾部时延分别达到 48.02 ms 和 49.49 ms，而 TensorRT FP16 和 INT8 的最大时延分别控制在 14.21 ms 和 12.09 ms 以内，说明 TensorRT 不仅降低了平均延迟，也显著改善了推理时延的抖动情况。
@@ -307,7 +307,7 @@
 	\caption{不同部署后端与 PyTorch 基线的一致性对比}
 	\label{tab:backend_consistency_real}
 	\small
-	\begin{tabularx}{\textwidth}{@{}YYYYY@{}}
+	\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}} l c c c c @{}}
 		\toprule
 		后端 & 覆盖像素 & 参考像素 & 覆盖 IoU & 差异像素 \\
 		\midrule
@@ -326,7 +326,7 @@
 		TensorRT FP16 & 9195 & 9190 & 0.9678 & 301 \\
 		 TensorRT INT8 & 8888 & 9190 & 0.8562 & 1400 \\
 		\bottomrule
-	\end{tabularx}
+	\end{tabular*}
 \end{table}
 
 从表中可见，ONNX Runtime FP32 与 PyTorch 结果在三组样本上完全一致；TensorRT FP16 的平均覆盖 IoU 仍达到 0.9669，平均差异像素约为 356，说明其在显著提速的同时仍较好保留了检测几何结构；TensorRT INT8 的平均覆盖 IoU 为 0.8458，平均差异像素约为 1781.7，虽然吞吐最高，但在复杂雨天场景下的偏差更明显。综合精度保持与部署效率，本文认为 TensorRT FP16 更适合作为实际车载部署的默认折中方案。
