@@ -1,0 +1,38 @@
+% !TeX root = ../main.tex
+
+\sysusetup{
+  keywords  = {高级驾驶辅助系统, 雨天环境, 车道线检测, CLRNet, 边缘部署},
+  keywords* = {Advanced Driver Assistance Systems, Rainy Environment, Lane Detection, CLRNet, Edge Deployment},
+  keywords** = {Memoire de bachelor, L'Abstract, Mots-cles},
+}
+
+\begin{abstract}
+车道线检测是高级驾驶辅助系统（ADAS）实现路径规划、车道保持等功能的重要基础，但在雨天环境下，雨滴遮挡、水膜反射、路面低对比度和局部积水等因素会显著破坏车道线的连续结构与可辨识性，导致传统方法和常规深度模型出现误检、漏检与定位抖动。围绕这一问题，本文按照“问题分析 - 数据构建 - 方法设计 - 工程验证”的主线，开展了面向雨天场景的车道线检测研究。
+
+在数据层面，本文构建并整理了 RainLane 雨天车道线数据集，形成了与 CLRNet 训练流程兼容的数据组织方式。当前可用原始有效样本共 6017 张，其中训练集 4208 张、验证集 904 张、测试集 905 张；结合雨纹合成、水膜反射模拟、局部遮挡和通用光度几何扰动后，样本规模扩展至 24068 张，为后续模型训练和分场景评估提供了统一的数据基础。
+
+在方法层面，本文以 CLRNet 为基线，针对雨天场景中的高频雨纹噪声、反光伪边缘和细长结构中断问题，设计了由频域门控与方向注意力组成的轻量化抗干扰模块，并完成了对应训练与消融验证。实验结果表明，在 RainLane 测试集上，基线 CLRNet 的 F1 为 59.56\%，加入 Frequency Gate 后为 59.65\%，完整 FGM 配置为 59.70\%。结果说明，所提模块在不显著增加结构复杂度的前提下，能够对雨天干扰带来稳定收益；其中，完整 FGM 在 Precision 与 Recall 之间表现更为均衡，并在中雨等复杂场景中体现出一定优势。
+
+在工程验证层面，本文完成了从 PyTorch 到 ONNX 再到 TensorRT 的真实部署链路，并在 Jetson Orin 平台上对已完成全链路导出的代表增强模型进行了测试。结果表明，TensorRT FP16 模式下平均推理时延为 7.5435 ms、吞吐达到 132.5641 FPS、峰值显存占用为 29.3867 MB；TensorRT INT8 模式下平均时延进一步下降至 5.9027 ms、吞吐提升至 169.4154 FPS，但输出一致性相较 FP16 略有下降。综合离线精度、部署效率与后端一致性，本文认为 TensorRT FP16 是当前更适合作为雨天车道线检测实际部署的后端配置。
+
+本文工作完成了从雨天数据构建、轻量化方法设计到嵌入式平台验证的闭环研究，为复杂天气条件下车道线检测模型的设计和边缘端部署提供了可复现的实验基础与工程参考。
+\end{abstract}
+
+\def\sysu@hf@font{\fontsize{9bp}{12bp}\selectfont}
+\fancyhead[L]{\sysu@hf@font Research on Robust Lane Detection Methods \\Under Rainy Conditions for Advanced Driver Assistance Systems}
+\begin{abstract*}
+Lane detection is a key prerequisite for Advanced Driver Assistance Systems (ADAS), yet rainy conditions introduce raindrop occlusion, water-film reflection, low road contrast, and local puddle interference, which seriously degrade lane continuity and visual discriminability. To address this problem, this thesis follows a complete pipeline of problem analysis, dataset construction, method design, and engineering verification for rainy-scene lane detection.
+
+On the data side, a dedicated RainLane dataset was organized for the CLRNet training and evaluation pipeline. The currently available valid raw set contains 6,017 images, including 4,208 for training, 904 for validation, and 905 for testing. After rain-streak synthesis, water-reflection simulation, local occlusion augmentation, and common photometric and geometric perturbations, the dataset scale was expanded to 24,068 samples, providing a unified basis for model training and scene-level evaluation.
+
+On the method side, this work takes CLRNet as the baseline and designs a lightweight anti-interference module composed of Frequency Gate and Directional Attention to suppress high-frequency rain noise, reflective pseudo-edges, and structural discontinuities under rainy conditions. Real training logs show that on the RainLane test set, the baseline CLRNet achieves an F1 score of 59.56\%, Frequency Gate reaches 59.65\%, and the complete FGM configuration reaches 59.70\%. These results indicate that the proposed module can bring stable gains under rainy interference without introducing significant structural complexity, and that the complete FGM configuration maintains a more balanced precision-recall trade-off, especially in moderate-rain scenes.
+
+On the engineering side, a real deployment chain from PyTorch to ONNX and TensorRT was completed and validated on a Jetson Orin platform using a fully exported representative enhanced model. The measured results show that TensorRT FP16 achieves an average latency of 7.5435 ms, a throughput of 132.5641 FPS, and a peak memory usage of 29.3867 MB. TensorRT INT8 further reduces the latency to 5.9027 ms and increases the throughput to 169.4154 FPS, but with more noticeable consistency deviation than FP16. Considering offline accuracy, deployment efficiency, and output consistency together, this thesis concludes that TensorRT FP16 is currently the more balanced backend option for rainy-scene lane detection deployment.
+
+Overall, this work forms a closed loop from rainy-scene data preparation to lightweight method design and embedded deployment validation, and provides a reproducible experimental and engineering reference for robust lane detection in complex weather conditions.
+\end{abstract*}
+
+% 法语（第三种语言）摘要，本科不需要就全部注释掉即可，研究生请直接注释
+%\begin{abstract**}
+%  La longeur de l'abstract francais doit faire reference a l'abstract chinois. Le titre de l'abstract francais est "ABSTRACT". La premiere lettre de chaque mot-cle doit etre en gros, et les mots-cles doivent etre separes par des virgules et espaces. Les mots-cles de chaque langue doivent etre correspondants les uns aux autres.
+%\end{abstract**}

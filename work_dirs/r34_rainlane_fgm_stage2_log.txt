@@ -1,0 +1,789 @@
+2026-04-18 00:05:54,581 - clrnet.utils.recorder - INFO - Config: 
+net = dict(type='Detector')
+
+backbone = dict(
+    type='ResNetWrapper',
+    resnet='resnet34',
+    pretrained=True,
+    replace_stride_with_dilation=[False, False, False],
+    out_conv=False,
+)
+
+num_points = 72
+max_lanes = 4
+sample_y = range(589, 230, -20)
+
+heads = dict(type='CLRHead',
+             num_priors=192,
+             refine_layers=3,
+             fc_hidden_dim=64,
+             sample_points=36)
+
+iou_loss_weight = 2.
+cls_loss_weight = 2.
+xyt_loss_weight = 0.2
+seg_loss_weight = 1.0
+
+work_dirs = "work_dirs/clr/r34_rainlane_fgm_stage2"
+
+neck = dict(type='FPN',
+            in_channels=[128, 256, 512],
+            out_channels=64,
+            num_outs=3,
+            attention=False,
+            lrf_block=dict(
+                type='LRFBlock',
+                channels=64,
+                freq_gate_threshold=0.22,
+                direction_bins=4,
+                res_scale_init=0.05,
+                enable_freq=True,
+                enable_dir=True,
+                apply_levels=[1, 2]))
+
+test_parameters = dict(conf_threshold=0.35, nms_thres=50, nms_topk=max_lanes)
+
+epochs = 10
+batch_size = 24
+
+optimizer = dict(
+    type='AdamW',
+    lr=2e-4,
+    weight_decay=0.01,
+    param_groups=[
+        dict(patterns=['backbone'], lr_mult=0.3),
+        dict(patterns=['neck.lrf_block'], lr_mult=2.0),
+        dict(patterns=['heads'], lr_mult=1.2),
+    ])
+auto_calc_total_iter = True
+scheduler = dict(type='CosineAnnealingLR', T_max='auto')
+
+eval_ep = 1
+save_ep = 1
+
+img_norm = dict(mean=[103.939, 116.779, 123.68], std=[1., 1., 1.])
+ori_img_w = 1640
+ori_img_h = 590
+img_w = 800
+img_h = 320
+cut_height = 270
+
+train_process = [
+    dict(type='RainRobustAug',
+         p=0.85,
+         reflection_p=0.35,
+         occlusion_p=0.3,
+         contrast_p=0.6),
+    dict(
+        type='GenerateLaneLine',
+        transforms=[
+            dict(name='Resize',
+                 parameters=dict(size=dict(height=img_h, width=img_w)),
+                 p=1.0),
+            dict(name='HorizontalFlip', parameters=dict(p=1.0), p=0.5),
+            dict(name='ChannelShuffle', parameters=dict(p=1.0), p=0.1),
+            dict(name='MultiplyAndAddToBrightness',
+                 parameters=dict(mul=(0.8, 1.2), add=(-20, 20)),
+                 p=0.7),
+            dict(name='LinearContrast',
+                 parameters=dict(alpha=(0.75, 1.35)),
+                 p=0.6),
+            dict(name='AddToHueAndSaturation',
+                 parameters=dict(value=(-12, 12)),
+                 p=0.6),
+            dict(name='OneOf',
+                 transforms=[
+                     dict(name='MotionBlur', parameters=dict(k=(3, 7))),
+                     dict(name='MedianBlur', parameters=dict(k=(3, 5))),
+                     dict(name='GaussianBlur', parameters=dict(sigma=(0.0,
+                                                                      1.8)))
+                 ],
+                 p=0.3),
+            dict(name='Affine',
+                 parameters=dict(translate_percent=dict(x=(-0.08, 0.08),
+                                                        y=(-0.05, 0.05)),
+                                 rotate=(-8, 8),
+                                 scale=(0.85, 1.15)),
+                 p=0.7),
+            dict(name='Resize',
+                 parameters=dict(size=dict(height=img_h, width=img_w)),
+                 p=1.0),
+        ],
+    ),
+    dict(type='ToTensor', keys=['img', 'lane_line', 'seg']),
+]
+
+val_process = [
+    dict(type='GenerateLaneLine',
+         transforms=[
+             dict(name='Resize',
+                  parameters=dict(size=dict(height=img_h, width=img_w)),
+                  p=1.0),
+         ],
+         training=False),
+    dict(type='ToTensor', keys=['img']),
+]
+
+dataset_path = './data/Rainylane_data_augmented'
+dataset_type = 'CULane'
+dataset = dict(train=dict(
+    type=dataset_type,
+    data_root=dataset_path,
+    split='train',
+    processes=train_process,
+),
+val=dict(
+    type=dataset_type,
+    data_root=dataset_path,
+    split='test',
+    processes=val_process,
+),
+test=dict(
+    type=dataset_type,
+    data_root=dataset_path,
+    split='test',
+    processes=val_process,
+))
+
+workers = 10
+log_interval = 200
+num_classes = 4 + 1
+ignore_label = 255
+bg_weight = 0.4
+lr_update_by_epoch = False
+
+2026-04-18 00:09:27,423 - clrnet.utils.recorder - INFO - Network: 
+MMDataParallel(
+  (module): Detector(
+    (backbone): ResNetWrapper(
+      (model): ResNet(
+        (conv1): Conv2d(3, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+        (relu): ReLU(inplace=True)
+        (maxpool): MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)
+        (layer1): Sequential(
+          (0): BasicBlock(
+            (conv1): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (1): BasicBlock(
+            (conv1): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (2): BasicBlock(
+            (conv1): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+        )
+        (layer2): Sequential(
+          (0): BasicBlock(
+            (conv1): Conv2d(64, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (downsample): Sequential(
+              (0): Conv2d(64, 128, kernel_size=(1, 1), stride=(2, 2), bias=False)
+              (1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            )
+          )
+          (1): BasicBlock(
+            (conv1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (2): BasicBlock(
+            (conv1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (3): BasicBlock(
+            (conv1): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+        )
+        (layer3): Sequential(
+          (0): BasicBlock(
+            (conv1): Conv2d(128, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (downsample): Sequential(
+              (0): Conv2d(128, 256, kernel_size=(1, 1), stride=(2, 2), bias=False)
+              (1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            )
+          )
+          (1): BasicBlock(
+            (conv1): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (2): BasicBlock(
+            (conv1): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (3): BasicBlock(
+            (conv1): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (4): BasicBlock(
+            (conv1): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (5): BasicBlock(
+            (conv1): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+        )
+        (layer4): Sequential(
+          (0): BasicBlock(
+            (conv1): Conv2d(256, 512, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (downsample): Sequential(
+              (0): Conv2d(256, 512, kernel_size=(1, 1), stride=(2, 2), bias=False)
+              (1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            )
+          )
+          (1): BasicBlock(
+            (conv1): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+          (2): BasicBlock(
+            (conv1): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn1): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (relu): ReLU(inplace=True)
+            (conv2): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
+            (bn2): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          )
+        )
+      )
+    )
+    (neck): FPN(
+      (lrf_block): LRFBlock(
+        (freq): FrequencyGate()
+        (dir): DirectionalAttention(
+          (dir_convs): ModuleList(
+            (0): Sequential(
+              (0): Conv2d(64, 64, kernel_size=(1, 5), stride=(1, 1), padding=(0, 2), groups=64, bias=False)
+              (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+            )
+            (1): Sequential(
+              (0): Conv2d(64, 64, kernel_size=(5, 1), stride=(1, 1), padding=(2, 0), groups=64, bias=False)
+              (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+              (2): ReLU(inplace=True)
+            )
+            (2): Sequential(
+              (0): Sequential(
+                (0): Conv2d(64, 64, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1), groups=64, bias=False)
+                (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+                (2): ReLU(inplace=True)
+              )
+              (1): Sequential(
+                (0): Conv2d(64, 64, kernel_size=(3, 1), stride=(1, 1), padding=(1, 0), groups=64, bias=False)
+                (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+                (2): ReLU(inplace=True)
+              )
+            )
+            (3): Sequential(
+              (0): Sequential(
+                (0): Conv2d(64, 64, kernel_size=(3, 1), stride=(1, 1), padding=(1, 0), groups=64, bias=False)
+                (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+                (2): ReLU(inplace=True)
+              )
+              (1): Sequential(
+                (0): Conv2d(64, 64, kernel_size=(1, 3), stride=(1, 1), padding=(0, 1), groups=64, bias=False)
+                (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+                (2): ReLU(inplace=True)
+              )
+            )
+          )
+          (attn_conv): Sequential(
+            (0): Conv2d(256, 64, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (2): Sigmoid()
+          )
+        )
+      )
+      (lateral_convs): ModuleList(
+        (0): ConvModule(
+          (conv): Conv2d(128, 64, kernel_size=(1, 1), stride=(1, 1))
+        )
+        (1): ConvModule(
+          (conv): Conv2d(256, 64, kernel_size=(1, 1), stride=(1, 1))
+        )
+        (2): ConvModule(
+          (conv): Conv2d(512, 64, kernel_size=(1, 1), stride=(1, 1))
+        )
+      )
+      (fpn_convs): ModuleList(
+        (0-2): 3 x ConvModule(
+          (conv): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        )
+      )
+    )
+    (heads): CLRHead(
+      (prior_embeddings): Embedding(192, 3)
+      (seg_decoder): SegDecoder(
+        (dropout): Dropout2d(p=0.1, inplace=False)
+        (conv): Conv2d(192, 5, kernel_size=(1, 1), stride=(1, 1))
+      )
+      (reg_modules): ModuleList(
+        (0): Linear(in_features=64, out_features=64, bias=True)
+        (1): ReLU(inplace=True)
+        (2): Linear(in_features=64, out_features=64, bias=True)
+        (3): ReLU(inplace=True)
+      )
+      (cls_modules): ModuleList(
+        (0): Linear(in_features=64, out_features=64, bias=True)
+        (1): ReLU(inplace=True)
+        (2): Linear(in_features=64, out_features=64, bias=True)
+        (3): ReLU(inplace=True)
+      )
+      (roi_gather): ROIGather(
+        (f_key): ConvModule(
+          (conv): Conv2d(64, 64, kernel_size=(1, 1), stride=(1, 1), bias=False)
+          (bn): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+          (activate): ReLU(inplace=True)
+        )
+        (f_query): Sequential(
+          (0): Conv1d(192, 192, kernel_size=(1,), stride=(1,), groups=192)
+          (1): ReLU()
+        )
+        (f_value): Conv2d(64, 64, kernel_size=(1, 1), stride=(1, 1))
+        (W): Conv1d(192, 192, kernel_size=(1,), stride=(1,), groups=192)
+        (resize): FeatureResize()
+        (convs): ModuleList(
+          (0-2): 3 x ConvModule(
+            (conv): Conv2d(64, 48, kernel_size=(9, 1), stride=(1, 1), padding=(4, 0), bias=False)
+            (bn): BatchNorm2d(48, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (activate): ReLU(inplace=True)
+          )
+        )
+        (catconv): ModuleList(
+          (0): ConvModule(
+            (conv): Conv2d(48, 64, kernel_size=(9, 1), stride=(1, 1), padding=(4, 0), bias=False)
+            (bn): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (activate): ReLU(inplace=True)
+          )
+          (1): ConvModule(
+            (conv): Conv2d(96, 64, kernel_size=(9, 1), stride=(1, 1), padding=(4, 0), bias=False)
+            (bn): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (activate): ReLU(inplace=True)
+          )
+          (2): ConvModule(
+            (conv): Conv2d(144, 64, kernel_size=(9, 1), stride=(1, 1), padding=(4, 0), bias=False)
+            (bn): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
+            (activate): ReLU(inplace=True)
+          )
+        )
+        (fc): Linear(in_features=2304, out_features=64, bias=True)
+        (fc_norm): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+      )
+      (reg_layers): Linear(in_features=64, out_features=76, bias=True)
+      (cls_layers): Linear(in_features=64, out_features=2, bias=True)
+      (criterion): NLLLoss()
+    )
+  )
+)
+2026-04-18 00:09:27,426 - clrnet.utils.recorder - INFO - Build train loader...
+2026-04-18 00:09:27,436 - clrnet.datasets.base_dataset - INFO - Loading CULane annotations...
+2026-04-18 00:09:27,645 - clrnet.utils.recorder - INFO - Start training...
+2026-04-18 00:09:32,692 - clrnet.utils.recorder - INFO - epoch: 0  step: 1  lr: 0.000060  loss: 16.8606  cls_loss: 6.2391  reg_xytl_loss: 3.4113  seg_loss: 5.2578  iou_loss: 1.9524  stage_0_acc: 37.7387  stage_1_acc: 43.7609  stage_2_acc: 45.5223  data: 1.7475  batch: 5.0448  eta: 9:50:09
+2026-04-18 00:11:04,452 - clrnet.utils.recorder - INFO - epoch: 0  step: 201  lr: 0.000060  loss: 3.1240  cls_loss: 0.6019  reg_xytl_loss: 0.7275  seg_loss: 0.3333  iou_loss: 1.4612  stage_0_acc: 98.4180  stage_1_acc: 98.4136  stage_2_acc: 98.4078  data: 0.0515  batch: 0.4533  eta: 0:54:42
+2026-04-18 00:12:35,900 - clrnet.utils.recorder - INFO - epoch: 0  step: 401  lr: 0.000060  loss: 2.2096  cls_loss: 0.4996  reg_xytl_loss: 0.5449  seg_loss: 0.2516  iou_loss: 0.9135  stage_0_acc: 98.0729  stage_1_acc: 97.9308  stage_2_acc: 97.8425  data: 0.0511  batch: 0.4560  eta: 0:51:46
+2026-04-18 00:14:07,413 - clrnet.utils.recorder - INFO - epoch: 0  step: 601  lr: 0.000059  loss: 1.8406  cls_loss: 0.4609  reg_xytl_loss: 0.4398  seg_loss: 0.2233  iou_loss: 0.7166  stage_0_acc: 97.7159  stage_1_acc: 97.7365  stage_2_acc: 97.6837  data: 0.0512  batch: 0.4604  eta: 0:49:47
+2026-04-18 00:14:54,483 - clrnet.utils.recorder - INFO - epoch: 0  step: 702  lr: 0.000059  loss: 1.7939  cls_loss: 0.4545  reg_xytl_loss: 0.4200  seg_loss: 0.2346  iou_loss: 0.6849  stage_0_acc: 97.8624  stage_1_acc: 97.8244  stage_2_acc: 97.7698  data: 0.0530  batch: 0.4951  eta: 0:49:01
+2026-04-18 00:14:54,833 - clrnet.datasets.base_dataset - INFO - Loading CULane annotations...
+2026-04-18 00:15:31,007 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test0_normal.txt
+2026-04-18 00:15:43,867 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 848, fp: 728, fn: 744,precision: 0.5380710659898477, recall: 0.5326633165829145, f1: 0.5353535353535352
+2026-04-18 00:15:43,880 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test1_crowd.txt
+2026-04-18 00:15:48,980 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 114, fp: 28, fn: 86,precision: 0.8028169014084507, recall: 0.57, f1: 0.6666666666666666
+2026-04-18 00:15:48,984 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test2_hlight.txt
+2026-04-18 00:16:01,884 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 933, fp: 896, fn: 879,precision: 0.5101148168398032, recall: 0.5149006622516556, f1: 0.5124965668772316
+2026-04-18 00:16:01,897 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test3_shadow.txt
+2026-04-18 00:16:14,187 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1036, fp: 400, fn: 296,precision: 0.7214484679665738, recall: 0.7777777777777778, f1: 0.7485549132947977
+2026-04-18 00:16:14,199 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test4_noline.txt
+2026-04-18 00:16:24,374 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 539, fp: 497, fn: 389,precision: 0.5202702702702703, recall: 0.5808189655172413, f1: 0.5488798370672097
+2026-04-18 00:16:24,383 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test5_arrow.txt
+2026-04-18 00:16:48,370 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2515, fp: 1315, fn: 1525,precision: 0.6566579634464752, recall: 0.6225247524752475, f1: 0.639135959339263
+2026-04-18 00:16:48,392 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test6_curve.txt
+2026-04-18 00:16:56,282 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 257, fp: 232, fn: 447,precision: 0.5255623721881391, recall: 0.3650568181818182, f1: 0.4308466051969824
+2026-04-18 00:16:56,289 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test7_cross.txt
+2026-04-18 00:17:36,753 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2610, fp: 4749, fn: 4462,precision: 0.35466775377089277, recall: 0.3690610859728507, f1: 0.36172129443559004
+2026-04-18 00:17:36,789 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test8_night.txt
+2026-04-18 00:18:09,193 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1836, fp: 3581, fn: 3596,precision: 0.3389329887391545, recall: 0.3379970544918999, f1: 0.33846437459673706
+2026-04-18 00:18:09,224 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test.txt
+2026-04-18 00:19:57,408 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 10688, fp: 12426, fn: 12424,precision: 0.4624037379942892, recall: 0.46244375216337835, f1: 0.46242374421321336
+2026-04-18 00:19:57,417 - clrnet.utils.culane_metric - INFO - iou thr: 0.55, tp: 9019, fp: 14095, fn: 14093,precision: 0.39019641775547287, recall: 0.3902301834544825, f1: 0.3902132998745294
+2026-04-18 00:19:57,425 - clrnet.utils.culane_metric - INFO - iou thr: 0.60, tp: 7758, fp: 15356, fn: 15354,precision: 0.3356407372155404, recall: 0.3356697819314642, f1: 0.3356552589451824
+2026-04-18 00:19:57,431 - clrnet.utils.culane_metric - INFO - iou thr: 0.65, tp: 6570, fp: 16544, fn: 16542,precision: 0.2842433157393787, recall: 0.2842679127725857, f1: 0.2842556137238783
+2026-04-18 00:19:57,436 - clrnet.utils.culane_metric - INFO - iou thr: 0.70, tp: 5179, fp: 17935, fn: 17933,precision: 0.22406333823656657, recall: 0.22408272758740047, f1: 0.22407303249253666
+2026-04-18 00:19:57,440 - clrnet.utils.culane_metric - INFO - iou thr: 0.75, tp: 3647, fp: 19467, fn: 19465,precision: 0.1577831617201696, recall: 0.15779681550709587, f1: 0.15778998831826244
+2026-04-18 00:19:57,444 - clrnet.utils.culane_metric - INFO - iou thr: 0.80, tp: 2234, fp: 20880, fn: 20878,precision: 0.09665138011594704, recall: 0.09665974385600554, f1: 0.09665556180504477
+2026-04-18 00:19:57,448 - clrnet.utils.culane_metric - INFO - iou thr: 0.85, tp: 996, fp: 22118, fn: 22116,precision: 0.04309076750021632, recall: 0.043094496365524405, f1: 0.04309263185220439
+2026-04-18 00:19:57,452 - clrnet.utils.culane_metric - INFO - iou thr: 0.90, tp: 243, fp: 22871, fn: 22869,precision: 0.01051310893830579, recall: 0.010514018691588784, f1: 0.010513563795266733
+2026-04-18 00:19:57,455 - clrnet.utils.culane_metric - INFO - iou thr: 0.95, tp: 13, fp: 23101, fn: 23099,precision: 0.0005624296962879641, recall: 0.000562478366216684, f1: 0.0005624540301994548
+2026-04-18 00:19:57,456 - clrnet.utils.culane_metric - INFO - mean result, total_tp: 46347, total_fp: 184793, total_fn: 184773,precision: 0.20051483949121748, recall: 0.20053219106957423, f1: 0.20052351490503173
+2026-04-18 00:19:57,510 - clrnet.utils.recorder - INFO - metric: 0.46242374421321336
+2026-04-18 00:20:00,652 - clrnet.utils.recorder - INFO - epoch: 1  step: 703  lr: 0.000059  loss: 1.7986  cls_loss: 0.4537  reg_xytl_loss: 0.4186  seg_loss: 0.2378  iou_loss: 0.6887  stage_0_acc: 97.8537  stage_1_acc: 97.8103  stage_2_acc: 97.7561  data: 0.1532  batch: 0.6200  eta: 0:49:23
+2026-04-18 00:21:38,727 - clrnet.utils.recorder - INFO - epoch: 1  step: 903  lr: 0.000058  loss: 1.6043  cls_loss: 0.4140  reg_xytl_loss: 0.3847  seg_loss: 0.2012  iou_loss: 0.6043  stage_0_acc: 97.9058  stage_1_acc: 97.9774  stage_2_acc: 97.9626  data: 0.0519  batch: 0.4821  eta: 0:48:18
+2026-04-18 00:23:14,991 - clrnet.utils.recorder - INFO - epoch: 1  step: 1103  lr: 0.000056  loss: 1.5618  cls_loss: 0.3930  reg_xytl_loss: 0.3846  seg_loss: 0.1877  iou_loss: 0.5965  stage_0_acc: 98.0702  stage_1_acc: 98.1098  stage_2_acc: 98.0933  data: 0.0512  batch: 0.4776  eta: 0:46:51
+2026-04-18 00:24:51,651 - clrnet.utils.recorder - INFO - epoch: 1  step: 1303  lr: 0.000055  loss: 1.5443  cls_loss: 0.3727  reg_xytl_loss: 0.3831  seg_loss: 0.1781  iou_loss: 0.6104  stage_0_acc: 98.1641  stage_1_acc: 98.2167  stage_2_acc: 98.2451  data: 0.0493  batch: 0.4915  eta: 0:45:23
+2026-04-18 00:25:39,882 - clrnet.utils.recorder - INFO - epoch: 1  step: 1404  lr: 0.000054  loss: 1.5924  cls_loss: 0.3903  reg_xytl_loss: 0.3860  seg_loss: 0.1827  iou_loss: 0.6334  stage_0_acc: 98.1554  stage_1_acc: 98.1803  stage_2_acc: 98.1897  data: 0.0516  batch: 0.4571  eta: 0:44:36
+2026-04-18 00:26:16,043 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test0_normal.txt
+2026-04-18 00:26:30,969 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 904, fp: 664, fn: 688,precision: 0.576530612244898, recall: 0.5678391959798995, f1: 0.5721518987341773
+2026-04-18 00:26:30,982 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test1_crowd.txt
+2026-04-18 00:26:37,877 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 160, fp: 15, fn: 40,precision: 0.9142857142857143, recall: 0.8, f1: 0.8533333333333333
+2026-04-18 00:26:37,882 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test2_hlight.txt
+2026-04-18 00:26:52,867 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1105, fp: 708, fn: 707,precision: 0.6094870380584666, recall: 0.6098233995584988, f1: 0.6096551724137931
+2026-04-18 00:26:52,888 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test3_shadow.txt
+2026-04-18 00:27:06,870 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1127, fp: 314, fn: 205,precision: 0.7820957668285913, recall: 0.8460960960960962, f1: 0.8128380815001804
+2026-04-18 00:27:06,881 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test4_noline.txt
+2026-04-18 00:27:17,354 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 604, fp: 352, fn: 324,precision: 0.6317991631799164, recall: 0.6508620689655172, f1: 0.6411889596602973
+2026-04-18 00:27:17,363 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test5_arrow.txt
+2026-04-18 00:27:43,963 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3039, fp: 850, fn: 1001,precision: 0.7814348161481101, recall: 0.7522277227722772, f1: 0.7665531592886871
+2026-04-18 00:27:43,984 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test6_curve.txt
+2026-04-18 00:27:53,178 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 417, fp: 195, fn: 287,precision: 0.6813725490196079, recall: 0.5923295454545454, f1: 0.6337386018237081
+2026-04-18 00:27:53,184 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test7_cross.txt
+2026-04-18 00:28:35,087 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2695, fp: 4611, fn: 4377,precision: 0.36887489734464823, recall: 0.3810803167420814, f1: 0.37487828627069136
+2026-04-18 00:28:35,123 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test8_night.txt
+2026-04-18 00:29:10,685 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2043, fp: 3417, fn: 3389,precision: 0.3741758241758242, recall: 0.3761045655375552, f1: 0.3751377157546823
+2026-04-18 00:29:10,711 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test.txt
+2026-04-18 00:31:13,196 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 12094, fp: 11126, fn: 11018,precision: 0.5208440999138674, recall: 0.5232779508480443, f1: 0.5220581887248553
+2026-04-18 00:31:13,204 - clrnet.utils.culane_metric - INFO - iou thr: 0.55, tp: 10415, fp: 12805, fn: 12697,precision: 0.448535745047373, recall: 0.45063170647282796, f1: 0.44958128291461624
+2026-04-18 00:31:13,209 - clrnet.utils.culane_metric - INFO - iou thr: 0.60, tp: 9138, fp: 14082, fn: 13974,precision: 0.39354005167958656, recall: 0.3953790238836968, f1: 0.3944573944573945
+2026-04-18 00:31:13,214 - clrnet.utils.culane_metric - INFO - iou thr: 0.65, tp: 8013, fp: 15207, fn: 15099,precision: 0.3450904392764858, recall: 0.3467030114226376, f1: 0.34589484589484587
+2026-04-18 00:31:13,219 - clrnet.utils.culane_metric - INFO - iou thr: 0.70, tp: 6645, fp: 16575, fn: 16467,precision: 0.28617571059431524, recall: 0.2875129802699896, f1: 0.28684278684278686
+2026-04-18 00:31:13,223 - clrnet.utils.culane_metric - INFO - iou thr: 0.75, tp: 4903, fp: 18317, fn: 18209,precision: 0.21115417743324721, recall: 0.21214087919695396, f1: 0.211646378313045
+2026-04-18 00:31:13,226 - clrnet.utils.culane_metric - INFO - iou thr: 0.80, tp: 3033, fp: 20187, fn: 20079,precision: 0.13062015503875968, recall: 0.13123052959501558, f1: 0.1309246309246309
+2026-04-18 00:31:13,230 - clrnet.utils.culane_metric - INFO - iou thr: 0.85, tp: 1435, fp: 21785, fn: 21677,precision: 0.06180017226528854, recall: 0.0620889581169955, f1: 0.061944228610895276
+2026-04-18 00:31:13,234 - clrnet.utils.culane_metric - INFO - iou thr: 0.90, tp: 401, fp: 22819, fn: 22711,precision: 0.017269595176571922, recall: 0.017350294219453097, f1: 0.017309850643183976
+2026-04-18 00:31:13,237 - clrnet.utils.culane_metric - INFO - iou thr: 0.95, tp: 16, fp: 23204, fn: 23096,precision: 0.0006890611541774332, recall: 0.0006922810661128419, f1: 0.000690667357334024
+2026-04-18 00:31:13,237 - clrnet.utils.culane_metric - INFO - mean result, total_tp: 56093, total_fp: 176107, total_fn: 175027,precision: 0.2415719207579673, recall: 0.24270076150917275, f1: 0.24213502546835886
+2026-04-18 00:31:13,299 - clrnet.utils.recorder - INFO - metric: 0.5220581887248553
+2026-04-18 00:31:16,503 - clrnet.utils.recorder - INFO - epoch: 2  step: 1405  lr: 0.000054  loss: 1.5773  cls_loss: 0.3885  reg_xytl_loss: 0.3805  seg_loss: 0.1815  iou_loss: 0.6268  stage_0_acc: 98.1337  stage_1_acc: 98.1619  stage_2_acc: 98.1764  data: 0.1581  batch: 0.5853  eta: 0:44:45
+2026-04-18 00:32:50,901 - clrnet.utils.recorder - INFO - epoch: 2  step: 1605  lr: 0.000053  loss: 1.4336  cls_loss: 0.3343  reg_xytl_loss: 0.3737  seg_loss: 0.1655  iou_loss: 0.5600  stage_0_acc: 98.3496  stage_1_acc: 98.3919  stage_2_acc: 98.4140  data: 0.0500  batch: 0.4759  eta: 0:43:05
+2026-04-18 00:34:24,210 - clrnet.utils.recorder - INFO - epoch: 2  step: 1805  lr: 0.000051  loss: 1.4219  cls_loss: 0.3473  reg_xytl_loss: 0.3619  seg_loss: 0.1550  iou_loss: 0.5577  stage_0_acc: 98.3400  stage_1_acc: 98.3567  stage_2_acc: 98.3492  data: 0.0512  batch: 0.4710  eta: 0:41:24
+2026-04-18 00:35:58,212 - clrnet.utils.recorder - INFO - epoch: 2  step: 2005  lr: 0.000049  loss: 1.3809  cls_loss: 0.3211  reg_xytl_loss: 0.3557  seg_loss: 0.1454  iou_loss: 0.5587  stage_0_acc: 98.4755  stage_1_acc: 98.5059  stage_2_acc: 98.5178  data: 0.0499  batch: 0.4779  eta: 0:39:45
+2026-04-18 00:36:46,780 - clrnet.utils.recorder - INFO - epoch: 2  step: 2106  lr: 0.000048  loss: 1.4005  cls_loss: 0.3141  reg_xytl_loss: 0.3702  seg_loss: 0.1529  iou_loss: 0.5633  stage_0_acc: 98.3778  stage_1_acc: 98.4375  stage_2_acc: 98.4527  data: 0.0499  batch: 0.4761  eta: 0:38:58
+2026-04-18 00:37:23,884 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test0_normal.txt
+2026-04-18 00:37:38,373 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 916, fp: 665, fn: 676,precision: 0.5793801391524351, recall: 0.5753768844221105, f1: 0.5773715726441853
+2026-04-18 00:37:38,386 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test1_crowd.txt
+2026-04-18 00:37:44,487 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 166, fp: 19, fn: 34,precision: 0.8972972972972973, recall: 0.83, f1: 0.8623376623376624
+2026-04-18 00:37:44,492 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test2_hlight.txt
+2026-04-18 00:37:58,974 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1072, fp: 815, fn: 740,precision: 0.5680975092739798, recall: 0.5916114790286976, f1: 0.5796161124628277
+2026-04-18 00:37:58,990 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test3_shadow.txt
+2026-04-18 00:38:12,772 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1153, fp: 355, fn: 179,precision: 0.7645888594164456, recall: 0.8656156156156156, f1: 0.8119718309859154
+2026-04-18 00:38:12,783 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test4_noline.txt
+2026-04-18 00:38:24,256 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 614, fp: 544, fn: 314,precision: 0.5302245250431779, recall: 0.6616379310344828, f1: 0.588686481303931
+2026-04-18 00:38:24,265 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test5_arrow.txt
+2026-04-18 00:38:50,874 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3205, fp: 994, fn: 835,precision: 0.7632769707073113, recall: 0.7933168316831684, f1: 0.7780070396892826
+2026-04-18 00:38:50,896 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test6_curve.txt
+2026-04-18 00:39:01,263 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 427, fp: 178, fn: 277,precision: 0.7057851239669422, recall: 0.6065340909090909, f1: 0.6524064171122995
+2026-04-18 00:39:01,270 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test7_cross.txt
+2026-04-18 00:39:44,576 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2841, fp: 4588, fn: 4231,precision: 0.3824202449858662, recall: 0.40172511312217196, f1: 0.3918350458589063
+2026-04-18 00:39:44,609 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test8_night.txt
+2026-04-18 00:40:21,486 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2129, fp: 3575, fn: 3303,precision: 0.3732468443197756, recall: 0.39193667157584683, f1: 0.38236350574712646
+2026-04-18 00:40:21,512 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test.txt
+2026-04-18 00:42:23,610 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 12523, fp: 11733, fn: 10589,precision: 0.5162846306068601, recall: 0.5418397369331949, f1: 0.5287535889207904
+2026-04-18 00:42:23,618 - clrnet.utils.culane_metric - INFO - iou thr: 0.55, tp: 10740, fp: 13516, fn: 12372,precision: 0.4427770448548813, recall: 0.46469366562824505, f1: 0.4534706975173113
+2026-04-18 00:42:23,625 - clrnet.utils.culane_metric - INFO - iou thr: 0.60, tp: 9474, fp: 14782, fn: 13638,precision: 0.39058377308707126, recall: 0.40991692627206644, f1: 0.40001688903901367
+2026-04-18 00:42:23,630 - clrnet.utils.culane_metric - INFO - iou thr: 0.65, tp: 8336, fp: 15920, fn: 14776,precision: 0.34366754617414247, recall: 0.3606784354447906, f1: 0.35196757304509374
+2026-04-18 00:42:23,635 - clrnet.utils.culane_metric - INFO - iou thr: 0.70, tp: 7002, fp: 17254, fn: 16110,precision: 0.28867084432717677, recall: 0.3029595015576324, f1: 0.29564262793447055
+2026-04-18 00:42:23,639 - clrnet.utils.culane_metric - INFO - iou thr: 0.75, tp: 5491, fp: 18765, fn: 17621,precision: 0.22637697889182057, recall: 0.2375822083766009, f1: 0.23184428306029387
+2026-04-18 00:42:23,642 - clrnet.utils.culane_metric - INFO - iou thr: 0.80, tp: 3856, fp: 20400, fn: 19256,precision: 0.15897097625329815, recall: 0.16683973693319487, f1: 0.16281033609187637
+2026-04-18 00:42:23,646 - clrnet.utils.culane_metric - INFO - iou thr: 0.85, tp: 2084, fp: 22172, fn: 21028,precision: 0.08591688654353562, recall: 0.09016960886119765, f1: 0.08799189326127344
+2026-04-18 00:42:23,650 - clrnet.utils.culane_metric - INFO - iou thr: 0.90, tp: 649, fp: 23607, fn: 22463,precision: 0.026756266490765172, recall: 0.028080650744202146, f1: 0.027402465799695998
+2026-04-18 00:42:23,653 - clrnet.utils.culane_metric - INFO - iou thr: 0.95, tp: 16, fp: 24240, fn: 23096,precision: 0.0006596306068601583, recall: 0.0006922810661128419, f1: 0.0006755615605472049
+2026-04-18 00:42:23,653 - clrnet.utils.culane_metric - INFO - mean result, total_tp: 60171, total_fp: 182389, total_fn: 170949,precision: 0.24806645778364117, recall: 0.2603452751817238, f1: 0.2540575916230366
+2026-04-18 00:42:23,707 - clrnet.utils.recorder - INFO - metric: 0.5287535889207904
+2026-04-18 00:42:27,123 - clrnet.utils.recorder - INFO - epoch: 3  step: 2107  lr: 0.000048  loss: 1.4049  cls_loss: 0.3171  reg_xytl_loss: 0.3716  seg_loss: 0.1538  iou_loss: 0.5624  stage_0_acc: 98.3485  stage_1_acc: 98.4180  stage_2_acc: 98.4353  data: 0.1678  batch: 0.6131  eta: 0:39:04
+2026-04-18 00:44:02,161 - clrnet.utils.recorder - INFO - epoch: 3  step: 2307  lr: 0.000045  loss: 1.3485  cls_loss: 0.3115  reg_xytl_loss: 0.3508  seg_loss: 0.1438  iou_loss: 0.5424  stage_0_acc: 98.5623  stage_1_acc: 98.5433  stage_2_acc: 98.5149  data: 0.0516  batch: 0.4631  eta: 0:37:28
+2026-04-18 00:45:35,875 - clrnet.utils.recorder - INFO - epoch: 3  step: 2507  lr: 0.000043  loss: 1.3290  cls_loss: 0.3147  reg_xytl_loss: 0.3455  seg_loss: 0.1377  iou_loss: 0.5311  stage_0_acc: 98.5762  stage_1_acc: 98.5553  stage_2_acc: 98.5441  data: 0.0510  batch: 0.4638  eta: 0:35:50
+2026-04-18 00:47:09,459 - clrnet.utils.recorder - INFO - epoch: 3  step: 2707  lr: 0.000041  loss: 1.2861  cls_loss: 0.2951  reg_xytl_loss: 0.3395  seg_loss: 0.1257  iou_loss: 0.5258  stage_0_acc: 98.6719  stage_1_acc: 98.6496  stage_2_acc: 98.6531  data: 0.0505  batch: 0.4802  eta: 0:34:12
+2026-04-18 00:47:56,500 - clrnet.utils.recorder - INFO - epoch: 3  step: 2808  lr: 0.000039  loss: 1.3150  cls_loss: 0.2988  reg_xytl_loss: 0.3558  seg_loss: 0.1432  iou_loss: 0.5171  stage_0_acc: 98.5731  stage_1_acc: 98.5628  stage_2_acc: 98.5569  data: 0.0527  batch: 0.4424  eta: 0:33:22
+2026-04-18 00:48:32,953 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test0_normal.txt
+2026-04-18 00:48:46,978 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 945, fp: 634, fn: 647,precision: 0.5984800506649778, recall: 0.5935929648241206, f1: 0.5960264900662252
+2026-04-18 00:48:46,991 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test1_crowd.txt
+2026-04-18 00:48:52,783 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 184, fp: 15, fn: 16,precision: 0.9246231155778895, recall: 0.92, f1: 0.9223057644110277
+2026-04-18 00:48:52,788 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test2_hlight.txt
+2026-04-18 00:49:07,160 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1117, fp: 823, fn: 695,precision: 0.5757731958762886, recall: 0.6164459161147903, f1: 0.5954157782515992
+2026-04-18 00:49:07,175 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test3_shadow.txt
+2026-04-18 00:49:20,478 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1190, fp: 330, fn: 142,precision: 0.7828947368421053, recall: 0.8933933933933934, f1: 0.8345021037868163
+2026-04-18 00:49:20,490 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test4_noline.txt
+2026-04-18 00:49:31,478 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 646, fp: 523, fn: 282,precision: 0.5526090675791274, recall: 0.6961206896551724, f1: 0.6161182641869337
+2026-04-18 00:49:31,486 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test5_arrow.txt
+2026-04-18 00:49:59,276 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3363, fp: 919, fn: 677,precision: 0.7853806632414759, recall: 0.8324257425742574, f1: 0.8082191780821918
+2026-04-18 00:49:59,299 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test6_curve.txt
+2026-04-18 00:50:08,778 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 513, fp: 201, fn: 191,precision: 0.7184873949579832, recall: 0.7286931818181818, f1: 0.7235543018335684
+2026-04-18 00:50:08,785 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test7_cross.txt
+2026-04-18 00:50:51,567 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2933, fp: 4521, fn: 4139,precision: 0.3934800107324926, recall: 0.4147341628959276, f1: 0.4038276194410023
+2026-04-18 00:50:51,600 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test8_night.txt
+2026-04-18 00:51:27,368 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2175, fp: 3542, fn: 3257,precision: 0.3804442889627427, recall: 0.40040500736377027, f1: 0.3901695219302179
+2026-04-18 00:51:27,398 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test.txt
+2026-04-18 00:53:35,507 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 13066, fp: 11508, fn: 10046,precision: 0.5317001709123463, recall: 0.5653340256143995, f1: 0.5480015098771127
+2026-04-18 00:53:35,515 - clrnet.utils.culane_metric - INFO - iou thr: 0.55, tp: 11340, fp: 13234, fn: 11772,precision: 0.4614633352323594, recall: 0.49065420560747663, f1: 0.47561129052552115
+2026-04-18 00:53:35,525 - clrnet.utils.culane_metric - INFO - iou thr: 0.60, tp: 9951, fp: 14623, fn: 13161,precision: 0.4049401806787662, recall: 0.4305555555555556, f1: 0.41735519859078135
+2026-04-18 00:53:35,537 - clrnet.utils.culane_metric - INFO - iou thr: 0.65, tp: 8848, fp: 15726, fn: 14264,precision: 0.36005534304549525, recall: 0.3828314295604015, f1: 0.371094241496456
+2026-04-18 00:53:35,546 - clrnet.utils.culane_metric - INFO - iou thr: 0.70, tp: 7641, fp: 16933, fn: 15471,precision: 0.31093839016847075, recall: 0.33060747663551404, f1: 0.3204714171874345
+2026-04-18 00:53:35,553 - clrnet.utils.culane_metric - INFO - iou thr: 0.75, tp: 6081, fp: 18493, fn: 17031,precision: 0.24745666151216733, recall: 0.2631100726895119, f1: 0.25504340896699235
+2026-04-18 00:53:35,558 - clrnet.utils.culane_metric - INFO - iou thr: 0.80, tp: 4375, fp: 20199, fn: 18737,precision: 0.17803369414828682, recall: 0.18929560401523018, f1: 0.18349201023361156
+2026-04-18 00:53:35,563 - clrnet.utils.culane_metric - INFO - iou thr: 0.85, tp: 2565, fp: 22009, fn: 20547,precision: 0.10437861154065273, recall: 0.11098130841121495, f1: 0.10757874428553453
+2026-04-18 00:53:35,568 - clrnet.utils.culane_metric - INFO - iou thr: 0.90, tp: 793, fp: 23781, fn: 22319,precision: 0.0322698787336209, recall: 0.03431118033921772, f1: 0.033259237512058046
+2026-04-18 00:53:35,571 - clrnet.utils.culane_metric - INFO - iou thr: 0.95, tp: 28, fp: 24546, fn: 23084,precision: 0.0011394156425490356, recall: 0.0012114918656974732, f1: 0.001174348865495114
+2026-04-18 00:53:35,571 - clrnet.utils.culane_metric - INFO - mean result, total_tp: 64688, total_fp: 181052, total_fn: 166432,precision: 0.2632375681614715, recall: 0.2798892350294219, f1: 0.2713081407540998
+2026-04-18 00:53:35,641 - clrnet.utils.recorder - INFO - metric: 0.5480015098771127
+2026-04-18 00:53:38,780 - clrnet.utils.recorder - INFO - epoch: 4  step: 2809  lr: 0.000039  loss: 1.3064  cls_loss: 0.2943  reg_xytl_loss: 0.3554  seg_loss: 0.1416  iou_loss: 0.5150  stage_0_acc: 98.5840  stage_1_acc: 98.5780  stage_2_acc: 98.5735  data: 0.1541  batch: 0.5635  eta: 0:33:25
+2026-04-18 00:55:15,392 - clrnet.utils.recorder - INFO - epoch: 4  step: 3009  lr: 0.000037  loss: 1.2680  cls_loss: 0.2839  reg_xytl_loss: 0.3445  seg_loss: 0.1341  iou_loss: 0.5055  stage_0_acc: 98.6458  stage_1_acc: 98.6681  stage_2_acc: 98.6679  data: 0.0495  batch: 0.5029  eta: 0:31:52
+2026-04-18 00:56:51,911 - clrnet.utils.recorder - INFO - epoch: 4  step: 3209  lr: 0.000034  loss: 1.2419  cls_loss: 0.2790  reg_xytl_loss: 0.3348  seg_loss: 0.1248  iou_loss: 0.5033  stage_0_acc: 98.6903  stage_1_acc: 98.6990  stage_2_acc: 98.7091  data: 0.0493  batch: 0.4819  eta: 0:30:18
+2026-04-18 00:58:28,340 - clrnet.utils.recorder - INFO - epoch: 4  step: 3409  lr: 0.000031  loss: 1.2281  cls_loss: 0.2693  reg_xytl_loss: 0.3323  seg_loss: 0.1236  iou_loss: 0.5029  stage_0_acc: 98.7044  stage_1_acc: 98.7370  stage_2_acc: 98.7561  data: 0.0502  batch: 0.4770  eta: 0:28:43
+2026-04-18 00:59:17,157 - clrnet.utils.recorder - INFO - epoch: 4  step: 3510  lr: 0.000030  loss: 1.2551  cls_loss: 0.2821  reg_xytl_loss: 0.3432  seg_loss: 0.1279  iou_loss: 0.5019  stage_0_acc: 98.6013  stage_1_acc: 98.6399  stage_2_acc: 98.6390  data: 0.0505  batch: 0.4724  eta: 0:27:56
+2026-04-18 00:59:54,125 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test0_normal.txt
+2026-04-18 01:00:09,364 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 949, fp: 628, fn: 643,precision: 0.6017755231452124, recall: 0.5961055276381909, f1: 0.5989271063426947
+2026-04-18 01:00:09,377 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test1_crowd.txt
+2026-04-18 01:00:15,875 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 178, fp: 15, fn: 22,precision: 0.9222797927461139, recall: 0.89, f1: 0.905852417302799
+2026-04-18 01:00:15,881 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test2_hlight.txt
+2026-04-18 01:00:30,875 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1193, fp: 692, fn: 619,precision: 0.6328912466843502, recall: 0.6583885209713024, f1: 0.6453881525561266
+2026-04-18 01:00:30,892 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test3_shadow.txt
+2026-04-18 01:00:44,572 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1174, fp: 283, fn: 158,precision: 0.8057652711050103, recall: 0.8813813813813813, f1: 0.8418788096091788
+2026-04-18 01:00:44,583 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test4_noline.txt
+2026-04-18 01:00:57,076 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 674, fp: 468, fn: 254,precision: 0.5901926444833625, recall: 0.7262931034482759, f1: 0.651207729468599
+2026-04-18 01:00:57,088 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test5_arrow.txt
+2026-04-18 01:01:24,878 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3284, fp: 790, fn: 756,precision: 0.8060873834069711, recall: 0.8128712871287128, f1: 0.8094651220113382
+2026-04-18 01:01:24,892 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test6_curve.txt
+2026-04-18 01:01:36,158 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 497, fp: 184, fn: 207,precision: 0.7298091042584435, recall: 0.7059659090909091, f1: 0.7176895306859206
+2026-04-18 01:01:36,166 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test7_cross.txt
+2026-04-18 01:02:17,766 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2963, fp: 4334, fn: 4109,precision: 0.40605728381526657, recall: 0.4189762443438914, f1: 0.41241561695316303
+2026-04-18 01:02:17,799 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test8_night.txt
+2026-04-18 01:02:52,978 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2173, fp: 3355, fn: 3259,precision: 0.39308972503617945, recall: 0.40003681885125186, f1: 0.39653284671532846
+2026-04-18 01:02:53,007 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test.txt
+2026-04-18 01:04:57,516 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 13085, fp: 10749, fn: 10027,precision: 0.5490056222203574, recall: 0.5661561093804085, f1: 0.5574489839389938
+2026-04-18 01:04:57,524 - clrnet.utils.culane_metric - INFO - iou thr: 0.55, tp: 11311, fp: 12523, fn: 11801,precision: 0.4745741377863556, recall: 0.48939944617514713, f1: 0.48187279001405875
+2026-04-18 01:04:57,531 - clrnet.utils.culane_metric - INFO - iou thr: 0.60, tp: 9896, fp: 13938, fn: 13216,precision: 0.4152051690861794, recall: 0.4281758393907927, f1: 0.4215907638563456
+2026-04-18 01:04:57,536 - clrnet.utils.culane_metric - INFO - iou thr: 0.65, tp: 8751, fp: 15083, fn: 14361,precision: 0.36716455483762694, recall: 0.3786344755970924, f1: 0.37281131512801946
+2026-04-18 01:04:57,541 - clrnet.utils.culane_metric - INFO - iou thr: 0.70, tp: 7476, fp: 16358, fn: 15636,precision: 0.3136695477049593, recall: 0.32346832814122534, f1: 0.3184935883781366
+2026-04-18 01:04:57,545 - clrnet.utils.culane_metric - INFO - iou thr: 0.75, tp: 5975, fp: 17859, fn: 17137,precision: 0.2506922883275992, recall: 0.25852371062651436, f1: 0.25454777829847053
+2026-04-18 01:04:57,549 - clrnet.utils.culane_metric - INFO - iou thr: 0.80, tp: 4253, fp: 19581, fn: 18859,precision: 0.17844256104724343, recall: 0.18401696088611977, f1: 0.18118689558215822
+2026-04-18 01:04:57,553 - clrnet.utils.culane_metric - INFO - iou thr: 0.85, tp: 2477, fp: 21357, fn: 20635,precision: 0.1039271628765629, recall: 0.10717376254759432, f1: 0.10552549737996848
+2026-04-18 01:04:57,556 - clrnet.utils.culane_metric - INFO - iou thr: 0.90, tp: 826, fp: 23008, fn: 22286,precision: 0.034656373248300745, recall: 0.03573901003807546, f1: 0.03518936650619861
+2026-04-18 01:04:57,560 - clrnet.utils.culane_metric - INFO - iou thr: 0.95, tp: 35, fp: 23799, fn: 23077,precision: 0.0014684903918771503, recall: 0.0015143648321218415, f1: 0.0014910748519575683
+2026-04-18 01:04:57,560 - clrnet.utils.culane_metric - INFO - mean result, total_tp: 64085, total_fp: 174255, total_fn: 167035,precision: 0.26888059075270626, recall: 0.2772802007615092, f1: 0.27301580539343073
+2026-04-18 01:04:57,618 - clrnet.utils.recorder - INFO - metric: 0.5574489839389938
+2026-04-18 01:05:00,752 - clrnet.utils.recorder - INFO - epoch: 5  step: 3511  lr: 0.000030  loss: 1.2532  cls_loss: 0.2815  reg_xytl_loss: 0.3443  seg_loss: 0.1266  iou_loss: 0.5008  stage_0_acc: 98.6046  stage_1_acc: 98.6469  stage_2_acc: 98.6451  data: 0.1535  batch: 0.5954  eta: 0:27:58
+2026-04-18 01:06:35,999 - clrnet.utils.recorder - INFO - epoch: 5  step: 3711  lr: 0.000027  loss: 1.2390  cls_loss: 0.2756  reg_xytl_loss: 0.3375  seg_loss: 0.1209  iou_loss: 0.5050  stage_0_acc: 98.7374  stage_1_acc: 98.7309  stage_2_acc: 98.7149  data: 0.0519  batch: 0.4646  eta: 0:26:22
+2026-04-18 01:08:08,925 - clrnet.utils.recorder - INFO - epoch: 5  step: 3911  lr: 0.000025  loss: 1.2034  cls_loss: 0.2587  reg_xytl_loss: 0.3233  seg_loss: 0.1200  iou_loss: 0.5014  stage_0_acc: 98.7131  stage_1_acc: 98.7440  stage_2_acc: 98.7580  data: 0.0510  batch: 0.4626  eta: 0:24:44
+2026-04-18 01:09:41,647 - clrnet.utils.recorder - INFO - epoch: 5  step: 4111  lr: 0.000022  loss: 1.1836  cls_loss: 0.2561  reg_xytl_loss: 0.3290  seg_loss: 0.1141  iou_loss: 0.4845  stage_0_acc: 98.7511  stage_1_acc: 98.7684  stage_2_acc: 98.7608  data: 0.0510  batch: 0.4640  eta: 0:23:07
+2026-04-18 01:10:27,840 - clrnet.utils.recorder - INFO - epoch: 5  step: 4212  lr: 0.000021  loss: 1.2041  cls_loss: 0.2576  reg_xytl_loss: 0.3293  seg_loss: 0.1228  iou_loss: 0.4943  stage_0_acc: 98.7392  stage_1_acc: 98.7234  stage_2_acc: 98.7261  data: 0.0522  batch: 0.4451  eta: 0:22:17
+2026-04-18 01:11:04,145 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test0_normal.txt
+2026-04-18 01:11:18,189 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 943, fp: 626, fn: 649,precision: 0.6010197578075207, recall: 0.5923366834170855, f1: 0.5966466308130338
+2026-04-18 01:11:18,202 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test1_crowd.txt
+2026-04-18 01:11:24,070 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 167, fp: 14, fn: 33,precision: 0.9226519337016574, recall: 0.835, f1: 0.8766404199475066
+2026-04-18 01:11:24,075 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test2_hlight.txt
+2026-04-18 01:11:37,876 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1163, fp: 628, fn: 649,precision: 0.649357900614182, recall: 0.641832229580574, f1: 0.6455731334998612
+2026-04-18 01:11:37,892 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test3_shadow.txt
+2026-04-18 01:11:50,975 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1185, fp: 227, fn: 147,precision: 0.8392351274787535, recall: 0.8896396396396397, f1: 0.8637026239067056
+2026-04-18 01:11:50,986 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test4_noline.txt
+2026-04-18 01:12:01,465 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 654, fp: 356, fn: 274,precision: 0.6475247524752475, recall: 0.7047413793103449, f1: 0.6749226006191951
+2026-04-18 01:12:01,474 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test5_arrow.txt
+2026-04-18 01:12:27,366 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3282, fp: 611, fn: 758,precision: 0.8430516311328025, recall: 0.8123762376237624, f1: 0.8274297239379806
+2026-04-18 01:12:27,389 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test6_curve.txt
+2026-04-18 01:12:36,067 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 463, fp: 150, fn: 241,precision: 0.7553017944535073, recall: 0.6576704545454546, f1: 0.7031131359149583
+2026-04-18 01:12:36,075 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test7_cross.txt
+2026-04-18 01:13:16,774 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3015, fp: 4126, fn: 4057,precision: 0.42220977454138076, recall: 0.426329185520362, f1: 0.4242594807570534
+2026-04-18 01:13:16,806 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test8_night.txt
+2026-04-18 01:13:51,878 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2172, fp: 3183, fn: 3260,precision: 0.40560224089635855, recall: 0.39985272459499266, f1: 0.40270696208399
+2026-04-18 01:13:51,909 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test.txt
+2026-04-18 01:15:52,305 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 13044, fp: 9921, fn: 10068,precision: 0.5679947746570869, recall: 0.5643821391484943, f1: 0.5661826941858195
+2026-04-18 01:15:52,314 - clrnet.utils.culane_metric - INFO - iou thr: 0.55, tp: 11228, fp: 11737, fn: 11884,precision: 0.4889179185717396, recall: 0.48580823814468677, f1: 0.48735811793302514
+2026-04-18 01:15:52,321 - clrnet.utils.culane_metric - INFO - iou thr: 0.60, tp: 9890, fp: 13075, fn: 13222,precision: 0.4306553450903549, recall: 0.42791623399100037, f1: 0.4292814202313519
+2026-04-18 01:15:52,326 - clrnet.utils.culane_metric - INFO - iou thr: 0.65, tp: 8820, fp: 14145, fn: 14292,precision: 0.3840627041149575, recall: 0.38161993769470404, f1: 0.38283742431147855
+2026-04-18 01:15:52,332 - clrnet.utils.culane_metric - INFO - iou thr: 0.70, tp: 7613, fp: 15352, fn: 15499,precision: 0.3315044633137383, recall: 0.3293959847698165, f1: 0.33044686068971507
+2026-04-18 01:15:52,336 - clrnet.utils.culane_metric - INFO - iou thr: 0.75, tp: 6119, fp: 16846, fn: 16993,precision: 0.2664489440452863, recall: 0.26475424022152994, f1: 0.2655988888165462
+2026-04-18 01:15:52,340 - clrnet.utils.culane_metric - INFO - iou thr: 0.80, tp: 4488, fp: 18477, fn: 18624,precision: 0.1954278249510124, recall: 0.19418483904465214, f1: 0.1948043492414871
+2026-04-18 01:15:52,344 - clrnet.utils.culane_metric - INFO - iou thr: 0.85, tp: 2663, fp: 20302, fn: 20449,precision: 0.11595906814718049, recall: 0.11522152994115611, f1: 0.11558912255572194
+2026-04-18 01:15:52,348 - clrnet.utils.culane_metric - INFO - iou thr: 0.90, tp: 900, fp: 22065, fn: 22212,precision: 0.039190071848465055, recall: 0.03894080996884735, f1: 0.03906504329708965
+2026-04-18 01:15:52,351 - clrnet.utils.culane_metric - INFO - iou thr: 0.95, tp: 49, fp: 22916, fn: 23063,precision: 0.002133681689527542, recall: 0.002120110764970578, f1: 0.002126874579508215
+2026-04-18 01:15:52,351 - clrnet.utils.culane_metric - INFO - mean result, total_tp: 64814, total_fp: 164836, total_fn: 166306,precision: 0.2822294796429349, recall: 0.2804344063689858, f1: 0.28132907958417436
+2026-04-18 01:15:52,415 - clrnet.utils.recorder - INFO - metric: 0.5661826941858195
+2026-04-18 01:15:55,402 - clrnet.utils.recorder - INFO - epoch: 6  step: 4213  lr: 0.000021  loss: 1.2054  cls_loss: 0.2590  reg_xytl_loss: 0.3301  seg_loss: 0.1218  iou_loss: 0.4945  stage_0_acc: 98.7348  stage_1_acc: 98.7207  stage_2_acc: 98.7207  data: 0.1518  batch: 0.5634  eta: 0:22:18
+2026-04-18 01:17:32,542 - clrnet.utils.recorder - INFO - epoch: 6  step: 4413  lr: 0.000018  loss: 1.1490  cls_loss: 0.2545  reg_xytl_loss: 0.3121  seg_loss: 0.1144  iou_loss: 0.4679  stage_0_acc: 98.7381  stage_1_acc: 98.7435  stage_2_acc: 98.7580  data: 0.0501  batch: 0.4886  eta: 0:20:44
+2026-04-18 01:19:09,010 - clrnet.utils.recorder - INFO - epoch: 6  step: 4613  lr: 0.000016  loss: 1.1850  cls_loss: 0.2633  reg_xytl_loss: 0.3244  seg_loss: 0.1196  iou_loss: 0.4778  stage_0_acc: 98.6632  stage_1_acc: 98.7006  stage_2_acc: 98.7269  data: 0.0514  batch: 0.4858  eta: 0:19:09
+2026-04-18 01:20:45,065 - clrnet.utils.recorder - INFO - epoch: 6  step: 4813  lr: 0.000013  loss: 1.1441  cls_loss: 0.2575  reg_xytl_loss: 0.3073  seg_loss: 0.1101  iou_loss: 0.4691  stage_0_acc: 98.8228  stage_1_acc: 98.8069  stage_2_acc: 98.8066  data: 0.0519  batch: 0.4827  eta: 0:17:34
+2026-04-18 01:21:33,600 - clrnet.utils.recorder - INFO - epoch: 6  step: 4914  lr: 0.000012  loss: 1.1508  cls_loss: 0.2451  reg_xytl_loss: 0.3167  seg_loss: 0.1179  iou_loss: 0.4710  stage_0_acc: 98.8545  stage_1_acc: 98.8442  stage_2_acc: 98.8475  data: 0.0520  batch: 0.4572  eta: 0:16:46
+2026-04-18 01:22:10,780 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test0_normal.txt
+2026-04-18 01:22:24,978 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 951, fp: 621, fn: 641,precision: 0.6049618320610687, recall: 0.5973618090452262, f1: 0.6011378002528445
+2026-04-18 01:22:24,991 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test1_crowd.txt
+2026-04-18 01:22:32,173 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 171, fp: 11, fn: 29,precision: 0.9395604395604396, recall: 0.855, f1: 0.8952879581151832
+2026-04-18 01:22:32,177 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test2_hlight.txt
+2026-04-18 01:22:46,979 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1187, fp: 633, fn: 625,precision: 0.6521978021978022, recall: 0.6550772626931567, f1: 0.6536343612334802
+2026-04-18 01:22:46,992 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test3_shadow.txt
+2026-04-18 01:23:01,776 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1186, fp: 235, fn: 146,precision: 0.8346235045742435, recall: 0.8903903903903904, f1: 0.861605521249546
+2026-04-18 01:23:01,787 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test4_noline.txt
+2026-04-18 01:23:14,576 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 655, fp: 400, fn: 273,precision: 0.6208530805687204, recall: 0.7058189655172413, f1: 0.6606152294503278
+2026-04-18 01:23:14,585 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test5_arrow.txt
+2026-04-18 01:23:42,888 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3320, fp: 618, fn: 720,precision: 0.8430675469781616, recall: 0.8217821782178217, f1: 0.832288794184006
+2026-04-18 01:23:42,909 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test6_curve.txt
+2026-04-18 01:23:52,670 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 492, fp: 143, fn: 212,precision: 0.7748031496062993, recall: 0.6988636363636364, f1: 0.7348767737117252
+2026-04-18 01:23:52,677 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test7_cross.txt
+2026-04-18 01:24:35,379 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3134, fp: 4060, fn: 3938,precision: 0.4356408117876008, recall: 0.44315610859728505, f1: 0.43936632552923033
+2026-04-18 01:24:35,410 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test8_night.txt
+2026-04-18 01:25:10,590 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2206, fp: 3249, fn: 3226,precision: 0.40439963336388635, recall: 0.4061119293078056, f1: 0.4052539726279049
+2026-04-18 01:25:10,622 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test.txt
+2026-04-18 01:27:14,308 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 13302, fp: 9970, fn: 9810,precision: 0.5715881746304572, recall: 0.5755451713395638, f1: 0.5735598482235253
+2026-04-18 01:27:14,315 - clrnet.utils.culane_metric - INFO - iou thr: 0.55, tp: 11453, fp: 11819, fn: 11659,precision: 0.4921364730147817, recall: 0.4955434406368986, f1: 0.49383408071748874
+2026-04-18 01:27:14,321 - clrnet.utils.culane_metric - INFO - iou thr: 0.60, tp: 10092, fp: 13180, fn: 13020,precision: 0.43365417669302164, recall: 0.43665628245067495, f1: 0.43515005174198
+2026-04-18 01:27:14,326 - clrnet.utils.culane_metric - INFO - iou thr: 0.65, tp: 9039, fp: 14233, fn: 14073,precision: 0.388406668958405, recall: 0.39109553478712356, f1: 0.3897464642980338
+2026-04-18 01:27:14,330 - clrnet.utils.culane_metric - INFO - iou thr: 0.70, tp: 7871, fp: 15401, fn: 15241,precision: 0.3382176005500172, recall: 0.34055901696088614, f1: 0.3393842704380821
+2026-04-18 01:27:14,334 - clrnet.utils.culane_metric - INFO - iou thr: 0.75, tp: 6347, fp: 16925, fn: 16765,precision: 0.27273117909934685, recall: 0.2746192454136379, f1: 0.27367195584684373
+2026-04-18 01:27:14,338 - clrnet.utils.culane_metric - INFO - iou thr: 0.80, tp: 4621, fp: 18651, fn: 18491,precision: 0.19856479889996562, recall: 0.19993942540671514, f1: 0.19924974129010004
+2026-04-18 01:27:14,341 - clrnet.utils.culane_metric - INFO - iou thr: 0.85, tp: 2751, fp: 20521, fn: 20361,precision: 0.11821072533516673, recall: 0.11902907580477674, f1: 0.11861848913418421
+2026-04-18 01:27:14,345 - clrnet.utils.culane_metric - INFO - iou thr: 0.90, tp: 952, fp: 22320, fn: 22160,precision: 0.04090752836026126, recall: 0.04119072343371409, f1: 0.04104863746119352
+2026-04-18 01:27:14,349 - clrnet.utils.culane_metric - INFO - iou thr: 0.95, tp: 44, fp: 23228, fn: 23068,precision: 0.0018906840838776211, recall: 0.001903772931810315, f1: 0.0018972059330803726
+2026-04-18 01:27:14,349 - clrnet.utils.culane_metric - INFO - mean result, total_tp: 66472, total_fp: 166248, total_fn: 164648,precision: 0.2856308009625301, recall: 0.28760816891658014, f1: 0.28661607450845117
+2026-04-18 01:27:14,411 - clrnet.utils.recorder - INFO - metric: 0.5735598482235253
+2026-04-18 01:27:17,968 - clrnet.utils.recorder - INFO - epoch: 7  step: 4915  lr: 0.000012  loss: 1.1416  cls_loss: 0.2431  reg_xytl_loss: 0.3134  seg_loss: 0.1156  iou_loss: 0.4695  stage_0_acc: 98.8513  stage_1_acc: 98.8459  stage_2_acc: 98.8493  data: 0.1728  batch: 0.6052  eta: 0:16:46
+2026-04-18 01:28:53,320 - clrnet.utils.recorder - INFO - epoch: 7  step: 5115  lr: 0.000010  loss: 1.1282  cls_loss: 0.2457  reg_xytl_loss: 0.3094  seg_loss: 0.1084  iou_loss: 0.4647  stage_0_acc: 98.8238  stage_1_acc: 98.7977  stage_2_acc: 98.7992  data: 0.0477  batch: 0.4875  eta: 0:15:11
+2026-04-18 01:30:29,116 - clrnet.utils.recorder - INFO - epoch: 7  step: 5315  lr: 0.000008  loss: 1.1482  cls_loss: 0.2439  reg_xytl_loss: 0.3145  seg_loss: 0.1189  iou_loss: 0.4710  stage_0_acc: 98.7793  stage_1_acc: 98.8059  stage_2_acc: 98.8064  data: 0.0499  batch: 0.4743  eta: 0:13:35
+2026-04-18 01:32:04,597 - clrnet.utils.recorder - INFO - epoch: 7  step: 5515  lr: 0.000007  loss: 1.1105  cls_loss: 0.2497  reg_xytl_loss: 0.2977  seg_loss: 0.1087  iou_loss: 0.4544  stage_0_acc: 98.7847  stage_1_acc: 98.7798  stage_2_acc: 98.7724  data: 0.0503  batch: 0.4720  eta: 0:11:59
+2026-04-18 01:32:52,346 - clrnet.utils.recorder - INFO - epoch: 7  step: 5616  lr: 0.000006  loss: 1.1558  cls_loss: 0.2476  reg_xytl_loss: 0.3158  seg_loss: 0.1224  iou_loss: 0.4701  stage_0_acc: 98.8335  stage_1_acc: 98.8466  stage_2_acc: 98.8592  data: 0.0504  batch: 0.4652  eta: 0:11:11
+2026-04-18 01:33:29,400 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test0_normal.txt
+2026-04-18 01:33:43,962 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 948, fp: 623, fn: 644,precision: 0.6034373010821134, recall: 0.5954773869346733, f1: 0.5994309200126462
+2026-04-18 01:33:43,975 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test1_crowd.txt
+2026-04-18 01:33:50,075 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 180, fp: 9, fn: 20,precision: 0.9523809523809523, recall: 0.9, f1: 0.9254498714652956
+2026-04-18 01:33:50,080 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test2_hlight.txt
+2026-04-18 01:34:04,669 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1179, fp: 668, fn: 633,precision: 0.6383324309691392, recall: 0.6506622516556292, f1: 0.6444383711396556
+2026-04-18 01:34:04,683 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test3_shadow.txt
+2026-04-18 01:34:17,978 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1189, fp: 248, fn: 143,precision: 0.8274182324286709, recall: 0.8926426426426426, f1: 0.8587937883712532
+2026-04-18 01:34:17,989 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test4_noline.txt
+2026-04-18 01:34:29,170 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 664, fp: 426, fn: 264,precision: 0.6091743119266055, recall: 0.7155172413793104, f1: 0.6580773042616452
+2026-04-18 01:34:29,179 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test5_arrow.txt
+2026-04-18 01:34:56,401 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3361, fp: 611, fn: 679,precision: 0.8461732124874118, recall: 0.8319306930693069, f1: 0.8389915127309037
+2026-04-18 01:34:56,423 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test6_curve.txt
+2026-04-18 01:35:07,166 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 505, fp: 151, fn: 199,precision: 0.7698170731707317, recall: 0.7173295454545454, f1: 0.7426470588235293
+2026-04-18 01:35:07,174 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test7_cross.txt
+2026-04-18 01:35:51,079 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3063, fp: 4133, fn: 4009,precision: 0.42565314063368537, recall: 0.4331165158371041, f1: 0.42935239697224564
+2026-04-18 01:35:51,109 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test8_night.txt
+2026-04-18 01:36:26,681 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2204, fp: 3286, fn: 3228,precision: 0.40145719489981785, recall: 0.4057437407952872, f1: 0.40358908624793993
+2026-04-18 01:36:26,710 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test.txt
+2026-04-18 01:38:23,913 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 13293, fp: 10155, fn: 9819,precision: 0.566914022517912, recall: 0.5751557632398754, f1: 0.5710051546391752
+2026-04-18 01:38:23,922 - clrnet.utils.culane_metric - INFO - iou thr: 0.55, tp: 11518, fp: 11930, fn: 11594,precision: 0.4912146025247356, recall: 0.498355832467982, f1: 0.49475945017182127
+2026-04-18 01:38:23,928 - clrnet.utils.culane_metric - INFO - iou thr: 0.60, tp: 10183, fp: 13265, fn: 12929,precision: 0.43428010917775506, recall: 0.44059363101419174, f1: 0.43741408934707904
+2026-04-18 01:38:23,933 - clrnet.utils.culane_metric - INFO - iou thr: 0.65, tp: 9101, fp: 14347, fn: 14011,precision: 0.38813544865233707, recall: 0.39377812391831085, f1: 0.39093642611683854
+2026-04-18 01:38:23,938 - clrnet.utils.culane_metric - INFO - iou thr: 0.70, tp: 7934, fp: 15514, fn: 15178,precision: 0.3383657454793586, recall: 0.3432848736587054, f1: 0.34080756013745706
+2026-04-18 01:38:23,942 - clrnet.utils.culane_metric - INFO - iou thr: 0.75, tp: 6414, fp: 17034, fn: 16698,precision: 0.2735414534288639, recall: 0.2775181723779855, f1: 0.2755154639175258
+2026-04-18 01:38:23,946 - clrnet.utils.culane_metric - INFO - iou thr: 0.80, tp: 4698, fp: 18750, fn: 18414,precision: 0.2003582395087001, recall: 0.20327102803738317, f1: 0.2018041237113402
+2026-04-18 01:38:23,950 - clrnet.utils.culane_metric - INFO - iou thr: 0.85, tp: 2836, fp: 20612, fn: 20276,precision: 0.12094848174684408, recall: 0.1227068189685012, f1: 0.1218213058419244
+2026-04-18 01:38:23,953 - clrnet.utils.culane_metric - INFO - iou thr: 0.90, tp: 998, fp: 22450, fn: 22114,precision: 0.04256226543841692, recall: 0.043181031498788505, f1: 0.042869415807560145
+2026-04-18 01:38:23,957 - clrnet.utils.culane_metric - INFO - iou thr: 0.95, tp: 50, fp: 23398, fn: 23062,precision: 0.0021323780279767996, recall: 0.002163378331602631, f1: 0.0021477663230240556
+2026-04-18 01:38:23,957 - clrnet.utils.culane_metric - INFO - mean result, total_tp: 67025, total_fp: 167455, total_fn: 164095,precision: 0.28584527465029, recall: 0.2900008653513326, f1: 0.28790807560137455
+2026-04-18 01:38:24,017 - clrnet.utils.recorder - INFO - metric: 0.5710051546391752
+2026-04-18 01:38:27,164 - clrnet.utils.recorder - INFO - epoch: 8  step: 5617  lr: 0.000006  loss: 1.1526  cls_loss: 0.2444  reg_xytl_loss: 0.3159  seg_loss: 0.1224  iou_loss: 0.4699  stage_0_acc: 98.8368  stage_1_acc: 98.8563  stage_2_acc: 98.8697  data: 0.1544  batch: 0.5900  eta: 0:11:11
+2026-04-18 01:40:03,684 - clrnet.utils.recorder - INFO - epoch: 8  step: 5817  lr: 0.000004  loss: 1.1118  cls_loss: 0.2355  reg_xytl_loss: 0.3067  seg_loss: 0.1144  iou_loss: 0.4552  stage_0_acc: 98.8325  stage_1_acc: 98.8417  stage_2_acc: 98.8404  data: 0.0518  batch: 0.4678  eta: 0:09:35
+2026-04-18 01:41:37,071 - clrnet.utils.recorder - INFO - epoch: 8  step: 6017  lr: 0.000003  loss: 1.1051  cls_loss: 0.2264  reg_xytl_loss: 0.3143  seg_loss: 0.1070  iou_loss: 0.4574  stage_0_acc: 98.8661  stage_1_acc: 98.8797  stage_2_acc: 98.8842  data: 0.0521  batch: 0.4678  eta: 0:07:59
+2026-04-18 01:43:10,956 - clrnet.utils.recorder - INFO - epoch: 8  step: 6217  lr: 0.000002  loss: 1.1008  cls_loss: 0.2308  reg_xytl_loss: 0.3067  seg_loss: 0.1056  iou_loss: 0.4577  stage_0_acc: 98.9290  stage_1_acc: 98.9399  stage_2_acc: 98.9269  data: 0.0508  batch: 0.4673  eta: 0:06:23
+2026-04-18 01:43:58,202 - clrnet.utils.recorder - INFO - epoch: 8  step: 6318  lr: 0.000001  loss: 1.1382  cls_loss: 0.2450  reg_xytl_loss: 0.3037  seg_loss: 0.1128  iou_loss: 0.4767  stage_0_acc: 98.8480  stage_1_acc: 98.8603  stage_2_acc: 98.8543  data: 0.0526  batch: 0.4490  eta: 0:05:35
+2026-04-18 01:44:34,038 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test0_normal.txt
+2026-04-18 01:44:47,962 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 954, fp: 616, fn: 638,precision: 0.6076433121019108, recall: 0.5992462311557789, f1: 0.603415559772296
+2026-04-18 01:44:47,976 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test1_crowd.txt
+2026-04-18 01:44:53,476 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 176, fp: 12, fn: 24,precision: 0.9361702127659575, recall: 0.88, f1: 0.9072164948453608
+2026-04-18 01:44:53,480 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test2_hlight.txt
+2026-04-18 01:45:07,474 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1197, fp: 638, fn: 615,precision: 0.6523160762942779, recall: 0.6605960264900662, f1: 0.6564299424184261
+2026-04-18 01:45:07,487 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test3_shadow.txt
+2026-04-18 01:45:20,175 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1190, fp: 246, fn: 142,precision: 0.8286908077994429, recall: 0.8933933933933934, f1: 0.8598265895953757
+2026-04-18 01:45:20,187 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test4_noline.txt
+2026-04-18 01:45:30,477 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 669, fp: 407, fn: 259,precision: 0.6217472118959108, recall: 0.7209051724137931, f1: 0.6676646706586826
+2026-04-18 01:45:30,486 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test5_arrow.txt
+2026-04-18 01:45:56,480 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3353, fp: 621, fn: 687,precision: 0.8437342727730247, recall: 0.8299504950495049, f1: 0.836785625155977
+2026-04-18 01:45:56,503 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test6_curve.txt
+2026-04-18 01:46:06,578 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 509, fp: 161, fn: 195,precision: 0.7597014925373134, recall: 0.7230113636363636, f1: 0.7409024745269287
+2026-04-18 01:46:06,584 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test7_cross.txt
+2026-04-18 01:46:47,576 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3081, fp: 4103, fn: 3991,precision: 0.428869710467706, recall: 0.43566176470588236, f1: 0.4322390572390572
+2026-04-18 01:46:47,608 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test8_night.txt
+2026-04-18 01:47:23,257 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2214, fp: 3268, fn: 3218,precision: 0.4038672017511857, recall: 0.40758468335787923, f1: 0.40571742715777903
+2026-04-18 01:47:23,285 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test.txt
+2026-04-18 01:49:20,800 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 13343, fp: 10072, fn: 9769,precision: 0.5698483877856075, recall: 0.577319141571478, f1: 0.5735594386055408
+2026-04-18 01:49:20,815 - clrnet.utils.culane_metric - INFO - iou thr: 0.55, tp: 11550, fp: 11865, fn: 11562,precision: 0.49327354260089684, recall: 0.4997403946002077, f1: 0.49648591140628023
+2026-04-18 01:49:20,826 - clrnet.utils.culane_metric - INFO - iou thr: 0.60, tp: 10184, fp: 13231, fn: 12928,precision: 0.43493487080931026, recall: 0.44063689858082383, f1: 0.43776731790143353
+2026-04-18 01:49:20,833 - clrnet.utils.culane_metric - INFO - iou thr: 0.65, tp: 9098, fp: 14317, fn: 14014,precision: 0.38855434550501816, recall: 0.3936483212184147, f1: 0.39108474649128466
+2026-04-18 01:49:20,839 - clrnet.utils.culane_metric - INFO - iou thr: 0.70, tp: 7921, fp: 15494, fn: 15191,precision: 0.33828742259235534, recall: 0.34272239529248877, f1: 0.340490467900359
+2026-04-18 01:49:20,844 - clrnet.utils.culane_metric - INFO - iou thr: 0.75, tp: 6429, fp: 16986, fn: 16683,precision: 0.27456758488148625, recall: 0.27816718587746625, f1: 0.27635566445289833
+2026-04-18 01:49:20,849 - clrnet.utils.culane_metric - INFO - iou thr: 0.80, tp: 4700, fp: 18715, fn: 18412,precision: 0.20072603032244288, recall: 0.2033575631706473, f1: 0.20203322801814
+2026-04-18 01:49:20,862 - clrnet.utils.culane_metric - INFO - iou thr: 0.85, tp: 2788, fp: 20627, fn: 20324,precision: 0.11906897288063208, recall: 0.12062997577016268, f1: 0.11984439142863283
+2026-04-18 01:49:20,873 - clrnet.utils.culane_metric - INFO - iou thr: 0.90, tp: 957, fp: 22458, fn: 22155,precision: 0.04087123638693146, recall: 0.04140706126687435, f1: 0.04113740408794893
+2026-04-18 01:49:20,881 - clrnet.utils.culane_metric - INFO - iou thr: 0.95, tp: 39, fp: 23376, fn: 23073,precision: 0.0016655989750160153, recall: 0.0016874350986500518, f1: 0.0016764459346186083
+2026-04-18 01:49:20,881 - clrnet.utils.culane_metric - INFO - mean result, total_tp: 67009, total_fp: 167141, total_fn: 164111,precision: 0.2861797992739697, recall: 0.28993163724472143, f1: 0.2880435016227137
+2026-04-18 01:49:20,941 - clrnet.utils.recorder - INFO - metric: 0.5735594386055408
+2026-04-18 01:49:24,152 - clrnet.utils.recorder - INFO - epoch: 9  step: 6319  lr: 0.000001  loss: 1.1446  cls_loss: 0.2464  reg_xytl_loss: 0.3062  seg_loss: 0.1140  iou_loss: 0.4780  stage_0_acc: 98.8382  stage_1_acc: 98.8527  stage_2_acc: 98.8478  data: 0.1648  batch: 0.5776  eta: 0:05:35
+2026-04-18 01:51:00,206 - clrnet.utils.recorder - INFO - epoch: 9  step: 6519  lr: 0.000001  loss: 1.1072  cls_loss: 0.2396  reg_xytl_loss: 0.3069  seg_loss: 0.1067  iou_loss: 0.4539  stage_0_acc: 98.9160  stage_1_acc: 98.9095  stage_2_acc: 98.8987  data: 0.0503  batch: 0.4751  eta: 0:03:59
+2026-04-18 01:52:36,189 - clrnet.utils.recorder - INFO - epoch: 9  step: 6719  lr: 0.000000  loss: 1.1102  cls_loss: 0.2552  reg_xytl_loss: 0.3024  seg_loss: 0.1091  iou_loss: 0.4436  stage_0_acc: 98.8354  stage_1_acc: 98.8442  stage_2_acc: 98.8336  data: 0.0516  batch: 0.4705  eta: 0:02:23
+2026-04-18 01:54:12,134 - clrnet.utils.recorder - INFO - epoch: 9  step: 6919  lr: 0.000000  loss: 1.1180  cls_loss: 0.2413  reg_xytl_loss: 0.3161  seg_loss: 0.1055  iou_loss: 0.4552  stage_0_acc: 98.8672  stage_1_acc: 98.8710  stage_2_acc: 98.8542  data: 0.0504  batch: 0.4868  eta: 0:00:48
+2026-04-18 01:54:59,824 - clrnet.utils.recorder - INFO - epoch: 9  step: 7020  lr: 0.000000  loss: 1.0972  cls_loss: 0.2337  reg_xytl_loss: 0.2980  seg_loss: 0.1183  iou_loss: 0.4473  stage_0_acc: 98.9236  stage_1_acc: 98.9160  stage_2_acc: 98.8896  data: 0.0523  batch: 0.4579  eta: 0:00:00
+2026-04-18 01:55:36,075 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test0_normal.txt
+2026-04-18 01:55:51,182 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 957, fp: 614, fn: 635,precision: 0.6091661362189688, recall: 0.6011306532663316, f1: 0.605121719886184
+2026-04-18 01:55:51,199 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test1_crowd.txt
+2026-04-18 01:55:57,875 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 177, fp: 11, fn: 23,precision: 0.9414893617021277, recall: 0.885, f1: 0.9123711340206185
+2026-04-18 01:55:57,878 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test2_hlight.txt
+2026-04-18 01:56:12,861 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1202, fp: 627, fn: 610,precision: 0.6571897211591033, recall: 0.6633554083885209, f1: 0.6602581708321889
+2026-04-18 01:56:12,875 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test3_shadow.txt
+2026-04-18 01:56:26,570 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 1193, fp: 246, fn: 139,precision: 0.8290479499652537, recall: 0.8956456456456456, f1: 0.861060988812703
+2026-04-18 01:56:26,581 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test4_noline.txt
+2026-04-18 01:56:37,676 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 670, fp: 402, fn: 258,precision: 0.625, recall: 0.7219827586206896, f1: 0.67
+2026-04-18 01:56:37,685 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test5_arrow.txt
+2026-04-18 01:57:04,463 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3348, fp: 615, fn: 692,precision: 0.8448145344436033, recall: 0.8287128712871287, f1: 0.8366862426590028
+2026-04-18 01:57:04,483 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test6_curve.txt
+2026-04-18 01:57:13,785 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 508, fp: 161, fn: 196,precision: 0.7593423019431988, recall: 0.7215909090909091, f1: 0.7399854333576111
+2026-04-18 01:57:13,792 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test7_cross.txt
+2026-04-18 01:57:54,088 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 3099, fp: 4084, fn: 3973,precision: 0.43143533342614504, recall: 0.43820701357466063, f1: 0.43479480883900384
+2026-04-18 01:57:54,121 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test_split/test8_night.txt
+2026-04-18 01:58:30,765 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 2215, fp: 3253, fn: 3217,precision: 0.40508412582297, recall: 0.40776877761413843, f1: 0.40642201834862385
+2026-04-18 01:58:30,792 - clrnet.utils.culane_metric - INFO - Calculating metric for List: ./data/Rainylane_data_augmented/list/test.txt
+2026-04-18 02:00:30,715 - clrnet.utils.culane_metric - INFO - iou thr: 0.50, tp: 13369, fp: 10013, fn: 9743,precision: 0.5717646052519032, recall: 0.5784440983039114, f1: 0.5750849571987784
+2026-04-18 02:00:30,723 - clrnet.utils.culane_metric - INFO - iou thr: 0.55, tp: 11576, fp: 11806, fn: 11536,precision: 0.495081686767599, recall: 0.5008653513326411, f1: 0.49795672559900206
+2026-04-18 02:00:30,731 - clrnet.utils.culane_metric - INFO - iou thr: 0.60, tp: 10183, fp: 13199, fn: 12929,precision: 0.43550594474382004, recall: 0.44059363101419174, f1: 0.43803501527078764
+2026-04-18 02:00:30,735 - clrnet.utils.culane_metric - INFO - iou thr: 0.65, tp: 9105, fp: 14277, fn: 14007,precision: 0.38940210418270466, recall: 0.39395119418483904, f1: 0.3916634404439282
+2026-04-18 02:00:30,740 - clrnet.utils.culane_metric - INFO - iou thr: 0.70, tp: 7925, fp: 15457, fn: 15187,precision: 0.3389359336241553, recall: 0.34289546555901695, f1: 0.34090420269282057
+2026-04-18 02:00:30,744 - clrnet.utils.culane_metric - INFO - iou thr: 0.75, tp: 6436, fp: 16946, fn: 16676,precision: 0.2752544692498503, recall: 0.27847005884389064, f1: 0.27685292725943134
+2026-04-18 02:00:30,747 - clrnet.utils.culane_metric - INFO - iou thr: 0.80, tp: 4733, fp: 18649, fn: 18379,precision: 0.20242066546916432, recall: 0.204785392869505, f1: 0.20359616294575644
+2026-04-18 02:00:30,751 - clrnet.utils.culane_metric - INFO - iou thr: 0.85, tp: 2827, fp: 20555, fn: 20285,precision: 0.12090496963476179, recall: 0.12231741086881273, f1: 0.12160708908676388
+2026-04-18 02:00:30,755 - clrnet.utils.culane_metric - INFO - iou thr: 0.90, tp: 998, fp: 22384, fn: 22114,precision: 0.04268240526901035, recall: 0.043181031498788505, f1: 0.04293027057254699
+2026-04-18 02:00:30,758 - clrnet.utils.culane_metric - INFO - iou thr: 0.95, tp: 50, fp: 23332, fn: 23062,precision: 0.0021383970575656486, recall: 0.002163378331602631, f1: 0.00215081515894524
+2026-04-18 02:00:30,758 - clrnet.utils.culane_metric - INFO - mean result, total_tp: 67202, total_fp: 166618, total_fn: 163918,precision: 0.28740911812505354, recall: 0.29076670128072, f1: 0.28907816062287606
+2026-04-18 02:00:30,816 - clrnet.utils.recorder - INFO - metric: 0.5750849571987784

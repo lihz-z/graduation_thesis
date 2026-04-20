@@ -1,0 +1,109 @@
+\addvspace {12bp}
+\contentsline {chapter}{\numberline {第1章}绪论}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}课题背景及研究意义}{1}{section.1.1}%
+\contentsline {subsection}{\numberline {1.1.1}课题背景}{1}{subsection.1.1.1}%
+\contentsline {subsection}{\numberline {1.1.2}研究意义}{1}{subsection.1.1.2}%
+\contentsline {subsubsection}{\numberline {（1）}理论意义}{1}{subsubsection.1.1.2.1}%
+\contentsline {subsubsection}{\numberline {（2）}现实意义}{2}{subsubsection.1.1.2.2}%
+\contentsline {section}{\numberline {1.2}雨天车道线检测国内外研究现状}{2}{section.1.2}%
+\contentsline {subsection}{\numberline {1.2.1}国内研究现状}{2}{subsection.1.2.1}%
+\contentsline {subsection}{\numberline {1.2.2}国外研究现状}{3}{subsection.1.2.2}%
+\contentsline {subsection}{\numberline {1.2.3}研究现状述评}{4}{subsection.1.2.3}%
+\contentsline {section}{\numberline {1.3}主要研究内容与结构安排}{4}{section.1.3}%
+\addvspace {12bp}
+\contentsline {chapter}{\numberline {第2章}相关理论与技术基础}{7}{chapter.2}%
+\contentsline {section}{\numberline {2.1}引言}{7}{section.2.1}%
+\contentsline {section}{\numberline {2.2}车道线检测方法概述}{7}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}基于传统图像处理的车道线检测方法}{7}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}基于深度学习的车道线检测方法}{8}{subsection.2.2.2}%
+\contentsline {subsubsection}{\numberline {（1）}基于语义分割的方法}{8}{subsubsection.2.2.2.1}%
+\contentsline {subsubsection}{\numberline {（2）}基于行分类的方法}{8}{subsubsection.2.2.2.2}%
+\contentsline {subsubsection}{\numberline {（3）}基于曲线拟合的方法}{8}{subsubsection.2.2.2.3}%
+\contentsline {subsubsection}{\numberline {（4）}基于锚点的方法}{8}{subsubsection.2.2.2.4}%
+\contentsline {subsection}{\numberline {2.2.3}车道线检测的评价指标}{9}{subsection.2.2.3}%
+\contentsline {section}{\numberline {2.3}恶劣天气图像增强技术}{9}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}基于物理模型的去雨方法}{9}{subsection.2.3.1}%
+\contentsline {subsection}{\numberline {2.3.2}基于深度学习的去雨方法}{10}{subsection.2.3.2}%
+\contentsline {subsection}{\numberline {2.3.3}对比度增强与频域滤波方法}{10}{subsection.2.3.3}%
+\contentsline {subsection}{\numberline {2.3.4}图像增强与检测的协同策略}{10}{subsection.2.3.4}%
+\contentsline {section}{\numberline {2.4}深度学习轻量化与部署技术}{10}{section.2.4}%
+\contentsline {subsection}{\numberline {2.4.1}模型轻量化方法}{11}{subsection.2.4.1}%
+\contentsline {subsection}{\numberline {2.4.2}边缘端推理加速技术}{11}{subsection.2.4.2}%
+\contentsline {subsection}{\numberline {2.4.3}精度与速度的权衡策略}{12}{subsection.2.4.3}%
+\contentsline {section}{\numberline {2.5}本章小结}{12}{section.2.5}%
+\addvspace {12bp}
+\contentsline {chapter}{\numberline {第3章}雨天车道线数据集构建与增强}{13}{chapter.3}%
+\contentsline {section}{\numberline {3.1}引言}{13}{section.3.1}%
+\contentsline {section}{\numberline {3.2}雨天干扰因素对车道线视觉特征的影响分析}{13}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}雨天环境的物理干扰机制}{13}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}雨天车道线视觉特征的任务化退化分析}{14}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3}雨天干扰对主流检测算法的影响说明}{15}{subsection.3.2.3}%
+\contentsline {section}{\numberline {3.3}数据标注与质量控制}{15}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}真实雨天数据的采集方案}{15}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}标注规范设计}{15}{subsection.3.3.2}%
+\contentsline {subsection}{\numberline {3.3.3}标注质量控制机制}{16}{subsection.3.3.3}%
+\contentsline {section}{\numberline {3.4}雨天车道线专用数据集的构建与增强}{17}{section.3.4}%
+\contentsline {subsection}{\numberline {3.4.1}数据集整体结构}{17}{subsection.3.4.1}%
+\contentsline {subsection}{\numberline {3.4.2}数据增强策略设计}{18}{subsection.3.4.2}%
+\contentsline {subsection}{\numberline {3.4.3}增强流水线的组合策略}{20}{subsection.3.4.3}%
+\contentsline {subsection}{\numberline {3.4.4}数据集有效性说明}{20}{subsection.3.4.4}%
+\contentsline {section}{\numberline {3.5}本章小结}{21}{section.3.5}%
+\addvspace {12bp}
+\contentsline {chapter}{\numberline {第4章}面向雨天的车道线检测算法设计}{23}{chapter.4}%
+\contentsline {section}{\numberline {4.1}引言}{23}{section.4.1}%
+\contentsline {section}{\numberline {4.2}CLRNet模型结构分析}{23}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}网络整体架构}{23}{subsection.4.2.1}%
+\contentsline {subsection}{\numberline {4.2.2}雨天场景下的性能局限}{24}{subsection.4.2.2}%
+\contentsline {section}{\numberline {4.3}雨天干扰分析与模块设计}{25}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}雨天干扰的频域特性分析}{25}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}轻量级抗干扰模块的设计思路}{26}{subsection.4.3.2}%
+\contentsline {section}{\numberline {4.4}抗干扰机制实现与融合}{26}{section.4.4}%
+\contentsline {subsection}{\numberline {4.4.1}频域门控与方向注意力模块的具体实现}{26}{subsection.4.4.1}%
+\contentsline {subsection}{\numberline {4.4.2}模块与CLRNet的融合策略}{28}{subsection.4.4.2}%
+\contentsline {subsection}{\numberline {4.4.3}消融实验设置与结果}{29}{subsection.4.4.3}%
+\contentsline {section}{\numberline {4.5}损失函数与训练策略}{30}{section.4.5}%
+\contentsline {subsection}{\numberline {4.5.1}损失函数设计}{30}{subsection.4.5.1}%
+\contentsline {subsection}{\numberline {4.5.2}训练策略设计}{31}{subsection.4.5.2}%
+\contentsline {section}{\numberline {4.6}本章小结}{31}{section.4.6}%
+\addvspace {12bp}
+\contentsline {chapter}{\numberline {第5章}模型部署与实验验证}{33}{chapter.5}%
+\contentsline {section}{\numberline {5.1}引言}{33}{section.5.1}%
+\contentsline {section}{\numberline {5.2}模型转换与TensorRT优化}{33}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1}PyTorch到ONNX的模型导出与优化}{33}{subsection.5.2.1}%
+\contentsline {subsection}{\numberline {5.2.2}TensorRT引擎构建与量化策略}{34}{subsection.5.2.2}%
+\contentsline {section}{\numberline {5.3}嵌入式平台部署实现}{34}{section.5.3}%
+\contentsline {subsection}{\numberline {5.3.1}硬件环境与软件栈配置}{34}{subsection.5.3.1}%
+\contentsline {subsection}{\numberline {5.3.2}部署链路的工程实现要点}{35}{subsection.5.3.2}%
+\contentsline {section}{\numberline {5.4}实验设置与评价指标}{36}{section.5.4}%
+\contentsline {subsection}{\numberline {5.4.1}实验环境与数据集}{36}{subsection.5.4.1}%
+\contentsline {subsection}{\numberline {5.4.2}评价指标与对比方法}{36}{subsection.5.4.2}%
+\contentsline {section}{\numberline {5.5}实验结果分析}{36}{section.5.5}%
+\contentsline {subsection}{\numberline {5.5.1}整体检测精度对比}{36}{subsection.5.5.1}%
+\contentsline {subsection}{\numberline {5.5.2}分降雨强度性能评估}{37}{subsection.5.5.2}%
+\contentsline {section}{\numberline {5.6}改进模型实验结果}{38}{section.5.6}%
+\contentsline {subsection}{\numberline {5.6.1}改进模型整体性能对比}{38}{subsection.5.6.1}%
+\contentsline {subsection}{\numberline {5.6.2}分场景性能分析}{38}{subsection.5.6.2}%
+\contentsline {subsection}{\numberline {5.6.3}训练收敛过程分析}{39}{subsection.5.6.3}%
+\contentsline {subsection}{\numberline {5.6.4}部署测试结果}{39}{subsection.5.6.4}%
+\contentsline {section}{\numberline {5.7}定性分析与部署讨论}{40}{section.5.7}%
+\contentsline {section}{\numberline {5.8}本章小结}{41}{section.5.8}%
+\addvspace {12bp}
+\contentsline {chapter}{\numberline {第6章}总结与展望}{43}{chapter.6}%
+\contentsline {section}{\numberline {6.1}研究成果总结}{43}{section.6.1}%
+\contentsline {subsection}{\numberline {6.1.1}完成了雨天干扰机理与任务难点的系统梳理}{43}{subsection.6.1.1}%
+\contentsline {subsection}{\numberline {6.1.2}完成了 RainLane 数据集的整理、增强与实验组织}{43}{subsection.6.1.2}%
+\contentsline {subsection}{\numberline {6.1.3}完成了基于 CLRNet 的轻量化抗干扰模块设计与验证}{43}{subsection.6.1.3}%
+\contentsline {subsection}{\numberline {6.1.4}完成了 Orin 平台上的部署链路与性能验证}{43}{subsection.6.1.4}%
+\contentsline {section}{\numberline {6.2}创新点总结}{44}{section.6.2}%
+\contentsline {subsection}{\numberline {6.2.1}围绕雨天场景构建了可直接服务训练与评估的数据基础}{44}{subsection.6.2.1}%
+\contentsline {subsection}{\numberline {6.2.2}提出了面向雨天退化模式的轻量化抗干扰改进思路}{44}{subsection.6.2.2}%
+\contentsline {subsection}{\numberline {6.2.3}形成了“数据 - 方法 - 部署”相贯通的研究路径}{44}{subsection.6.2.3}%
+\contentsline {section}{\numberline {6.3}未来工作展望}{44}{section.6.3}%
+\contentsline {subsection}{\numberline {6.3.1}继续完善完整 FGM 的联合训练与系统验证}{45}{subsection.6.3.1}%
+\contentsline {subsection}{\numberline {6.3.2}补充更完整的泛化与跨场景评估}{45}{subsection.6.3.2}%
+\contentsline {subsection}{\numberline {6.3.3}推进边缘端部署的定量化与系统化测试}{45}{subsection.6.3.3}%
+\contentsline {subsection}{\numberline {6.3.4}扩展到更复杂天气与闭环应用场景}{45}{subsection.6.3.4}%
+\addvspace {12bp}
+\contentsline {chapter}{参考文献}{46}{chapter*.44}%
+\contentsline {chapter}{致谢}{49}{appendix*.45}%
+\contentsfinish 

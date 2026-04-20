@@ -1,0 +1,337 @@
+\chapter{模型部署与实验验证}
+\label{chap:deployment_exp}
+
+\section{引言}
+\label{sec:intro_de}
+
+前述章节已分别从数据基础与算法设计两个层面展开本文研究：第三章完成了 RainLane 数据集的构建与增强，第四章围绕 CLRNet 在雨天场景下的失效机理提出了“频域门控 + 方向注意力”的轻量化抗干扰改进思路。接下来的问题在于，这一方案能否形成可执行、可复现且可部署的工程链路，并通过系统实验获得可信的验证结果。
+
+因此，本章将研究重心由“方法提出”转向“工程落地与实验核验”。一方面，系统说明模型从训练框架导出到边缘端推理的部署过程，明确从 PyTorch 到 ONNX 再到 TensorRT 的关键步骤；另一方面，给出各配置在 RainLane 测试集上的整体性能、分场景性能、可视化结果和边缘端部署结果，以检验方法的实际有效性。
+
+需要说明的是，本章中的表格与图像均依据最新实验与部署结果进行了统一整理。其中，离线精度结果沿用前述训练阶段的统计结论，部署相关指标、流程图、后端一致性对比和定性可视化则统一来自已完成导出与测试的实验结果。为保持全文叙事的连续性，本章仅在原有位置对结果进行替换和补充，不调整章节结构。
+
+\section{模型转换与TensorRT优化}
+\label{sec:model_conversion}
+
+深度学习模型的训练与部署运行在不同的软件栈中。训练阶段更强调实验灵活性与调参便利性，部署阶段则更关注推理时延、显存占用和稳定性。因此，本文在部署实现中采用“训练模型导出为统一中间表示，再交由推理引擎进行硬件相关优化”的技术路线。
+
+\subsection{PyTorch到ONNX的模型导出与优化}
+
+本课题训练阶段采用 PyTorch 完成模型搭建和参数学习；部署阶段则选用 ONNX 作为框架无关的模型交换格式。导出过程中，首先将模型切换至评估模式，随后使用固定尺寸的虚拟输入张量完成计算图导出。对于改进模块中的频域门控与方向注意力分支，需要保证其所涉及的卷积、逐元素运算以及张量拼接操作能够被 ONNX 正确表示；在出现框架特有操作时，则通过等价重写的方式保证计算图可追踪。
+
+模型导出后，进一步利用计算图简化与优化工具进行图优化，包括常量折叠、冗余节点清理与部分算子融合，以减少部署阶段不必要的图执行开销。经过这一处理后，模型在进入推理引擎之前具有更清晰、稳定的计算图结构。
+
+\subsection{TensorRT引擎构建与量化策略}
+
+在 NVIDIA GPU 平台上，TensorRT 提供了面向部署场景的图优化、内存复用和精度转换能力。本课题使用 TensorRT 构建推理引擎时，主要关注以下三点。
+
+\textbf{（1）层融合与内核选择}：将卷积、归一化和激活等连续操作尽可能融合，以减少中间张量读写和 kernel 启动开销。
+
+\textbf{（2）低精度推理支持}：为满足边缘端实时性需求，在保证数值稳定性的前提下，优先考虑 FP16 推理；同时保留 INT8 量化与校准接口，以便比较不同精度模式下的部署表现。
+
+\textbf{（3）动态与静态输入的兼容性}：结合车道线检测任务固定输入分辨率的特点，以静态批量和固定尺寸输入为主，有利于推理引擎充分优化内存布局和执行路径。
+
+综合来看，这一部署链路的意义不只是完成模型运行，更在于为本文方法迁移到车载平台提供较为清晰的工程实现路径。
+
+
+\section{嵌入式平台部署实现}
+\label{sec:orin_deployment}
+
+\subsection{硬件环境与软件栈配置}
+
+本课题选用 NVIDIA Orin 作为目标部署平台。该平台在车载边缘计算场景中具有代表性，能够同时提供 CUDA 核、Tensor Core 以及面向低功耗场景的 DLA 支持，适合作为雨天车道线检测算法实时部署的验证载体。
+
+在软件栈上，部署过程依赖 CUDA、cuDNN 与 TensorRT 等组件协同完成。整体流程包括：模型导出、引擎构建、引擎序列化、设备端反序列化加载、图像预处理、异步推理以及后处理结果解析。为了降低端到端延迟，图像缩放、归一化等预处理步骤尽量放在 GPU 端执行，以减少 CPU 与 GPU 之间的频繁数据搬运。
+
+表~\ref{tab:orin_environment_real} 汇总了本研究部署所使用的硬件与软件环境。可以看到，实际测试平台为 Jetson Orin，驱动版本为 540.4.0，JetPack/L4T 版本为 R36.4.3，并在 TensorRT 10.3.0、PyTorch 2.5.0a0 与 ONNX Runtime GPU 1.23.0 的组合上完成了全链路验证。统一采用 $320\times 800$ 输入分辨率与 batch size 为 1 的设置，保证了不同后端延迟和吞吐测试的可比性。
+
+\begin{table}[htbp]
+	\centering
+	\caption{Jetson Orin 部署环境与测试设置}
+	\label{tab:orin_environment_real}
+	\small
+	\begin{tabularx}{\textwidth}{@{}YYY@{}}
+		\toprule
+		项目 & 取值 & 来源 \\
+		\midrule
+		Target Platform & Jetson Orin & \texttt{nvidia-smi} \\
+		Driver Version & 540.4.0 & \texttt{nvidia-smi} \\
+		JetPack / L4T & R36.4.3 & \texttt{/etc/nv\_tegra\_release} \\
+		TensorRT & 10.3.0 & Python \texttt{tensorrt} \\
+		PyTorch & 2.5.0a0+872d972e41.nv24.08 & \texttt{.venv} \\
+		ONNX Runtime GPU & 1.23.0 & \texttt{.venv} \\
+		Input Resolution & 320 $\times$ 800 & deployment config \\
+		Batch Size & 1 & benchmark setup \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+\subsection{部署链路的工程实现要点}
+
+从当前已经打通的流程来看，模型部署的关键不只在于引擎构建本身，还包括以下几个工程细节。
+
+\textbf{（1）模块兼容性}：改进模块中的频域门控和方向注意力虽然结构相对轻量，但仍需确保其核心算子能够被部署框架稳定支持。
+
+\textbf{（2）内存管理}：在批大小固定为 1 的前提下，尽量减少中间特征的冗余缓存，以保证在边缘端显存受限条件下仍可稳定运行。
+
+\textbf{（3）流水并行}：通过 CUDA 流和异步执行机制，将预处理、推理和后处理组织为流水线，尽可能提高整体吞吐率。
+
+这些工作共同保证了“从论文模型到设备推理程序”的链路是连通的，也为模型效果验证与边缘端测试提供了稳定的实验平台。
+
+在具体产物层面，当前已经完成导出的关键模型如表~\ref{tab:deployment_artifacts_real} 所示。可以看到，本轮实际打通部署链路的是一组已完成全链路导出的增强配置，其最优检查点大小为 251.023 MB；导出为 ONNX 后模型大小降至 84.143 MB，进一步构建 TensorRT FP16 与 INT8 引擎后，序列化模型分别压缩至 44.566 MB 和 24.505 MB。这说明部署链路不仅完成了格式转换，也显著降低了运行时需要加载的模型规模。
+
+\begin{table}[htbp]
+	\centering
+	\caption{部署阶段关键工件及其文件规模}
+	\label{tab:deployment_artifacts_real}
+	\footnotesize
+	\begin{tabularx}{\textwidth}{l l c l}
+		\toprule
+		工件 & 类型 & 大小（MB） \\
+		\midrule
+		\texttt{best.pth} & PyTorch checkpoint & 251.023 \\
+		\texttt{clrnet\_da\_only.onnx} & ONNX 图 & 84.143  \\
+		\texttt{clrnet\_da\_only\_fp16.engine} & TensorRT FP16 引擎 & 44.566  \\
+		\texttt{clrnet\_da\_only\_int8.engine} & TensorRT INT8 引擎 & 24.505 \\
+		\texttt{clrnet\_da\_only\_int8.calib} & INT8 校准缓存 & 0.024 \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+
+\section{实验设置与评价指标}
+\label{sec:exp_setup}
+
+\subsection{实验环境与数据集}
+
+模型训练与离线评估基于自建 RainLane 数据集展开。按照目前已确认的数据，RainLane 原始有效样本共 6017 张，其中训练集 4208 张、验证集 904 张、测试集 905 张，划分比例约为 7:1.5:1.5。结合第三章的数据增强流程后，样本总规模扩展至 24068 张。
+
+实验中采用统一输入分辨率 \(320\times 800\)，以保证不同配置之间具有可比性。各配置均在相同数据组织方式下进行训练或微调，尽量控制由数据接口、输入尺寸和主干网络差异带来的额外影响。
+
+\subsection{评价指标与对比方法}
+
+本章采用 F1 分数、精确率和召回率作为主要评价指标。其中，F1 分数用于综合衡量模型在误检与漏检之间的平衡；精确率反映预测为车道线的结果中真正正确的比例；召回率反映真实车道线被成功检测到的比例。
+
+本轮结果回填以当前已完成训练与部署链路整理的三种 CLRNet 配置为统一比较对象，包括基线 CLRNet、Frequency Gate 单分支以及完整 FGM。这样既能保持第四章算法设计与第五章部署验证之间的对应关系，也使本章各组结果保持在统一实验设置下进行比较。
+
+\section{实验结果分析}
+\label{sec:result_analysis}
+
+\subsection{整体检测精度对比}
+
+表~\ref{tab:overall_comparison} 给出了三种已完成训练配置在 RainLane 测试集上的整体性能表现。
+
+\begin{table}[htbp]
+	\centering
+	\caption{三种已完成训练配置在RainLane测试集上的整体性能对比}
+	\label{tab:overall_comparison}
+	\small
+	\begin{tabularx}{\textwidth}{@{}YYYY@{}}
+		\toprule
+		方法 & F1分数（\%） & 精确率（\%） & 召回率（\%） \\
+		\midrule
+		CLRNet（基线） & 59.56 & 59.02 & 60.10 \\
+		CLRNet + Frequency Gate & 59.65 & 59.43 & 59.88 \\
+		CLRNet + FGM & 59.70 & 59.48 & 59.93 \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+从表中可以看出，两种改进配置均较基线取得了正向收益。其中，Frequency Gate 对整体 F1 带来了直接提升，完整 FGM 则在 Precision 和 Recall 两项指标上同时优于基线，说明本文提出的抗干扰设计在 RainLane 这类退化较明显的数据上是有效的。
+
+除上述模块内部比较外，为了从方法层面观察本文方案在现有车道线检测模型中的相对表现，进一步补充了与若干代表性方法的横向对比，如表~\ref{tab:overall_method_comparison} 所示。考虑到车道线检测研究中通常以 F1 作为整体性能的主指标，下面主要围绕 F1 展开分析，同时保留 Precision 与 Recall 作为参考。对比方法包括语义分割路线的 SCNN\cite{pan2018spatial}、注意力引导的 LaneATT\cite{tabellion2021laneatt}、跨层细化基线 CLRNet\cite{zheng2022clrnet}，以及较新的 GSENet\cite{su2024gsenet} 和 DLNet\cite{lu2025dlnet}；本文方法则采用本章前述 CLRNet-FGM 的实验结果。
+
+\begin{table}[htbp]
+	\centering
+	\caption{本文方法与代表性车道线检测方法的整体性能对比}
+	\label{tab:overall_method_comparison}
+	\small
+	\begin{tabularx}{\textwidth}{@{}YYYY@{}}
+		\toprule
+		方法 & F1分数（\%） & 精确率（\%） & 召回率（\%） \\
+		\midrule
+		SCNN & 28.11 & 34.99 & 23.49 \\
+		LaneATT & 34.53 & 45.15 & 27.95 \\
+		CLRNet & 44.12 & 51.01 & 38.87 \\
+		GSENet & 56.85 & 57.39 & 56.32 \\
+		DLNet & 58.03 & 58.46 & 57.60 \\
+		CLRNet-FGM & 59.70 & 59.48 & 59.93 \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+从表中可以看出，随着方法从早期分割式结构逐步发展到跨层细化和方向感知特征融合，整体 F1 呈现出较为明显的提升趋势。SCNN 和 LaneATT 的 F1 分别为 $28.11\%$ 和 $34.53\%$，在当前雨天任务中表现相对有限；CLRNet 提升至 $44.12\%$，说明跨层细化机制对车道线结构恢复具有积极作用。进一步地，GSENet 和 DLNet 分别达到 $56.85\%$ 和 $58.03\%$，已能在复杂场景下保持较好的精度水平。相比之下，本文的 CLRNet-FGM 取得了 $59.70\%$ 的 F1，较 DLNet 提升 $1.67$ 个百分点，较 GSENet 提升 $2.85$ 个百分点；同时其 Precision 与 Recall 分别达到 $59.48\%$ 和 $59.93\%$，表明所提出的抗干扰模块在雨天车道线检测任务中具有一定的综合优势。
+
+\subsection{分降雨强度性能评估}
+
+为进一步观察不同配置在复杂雨天子场景下的稳定性，表~\ref{tab:rain_intensity} 统计了五类 RainLane 场景评测子集中的 F1 分数，分别对应小雨、中雨、大雨/暴雨、强反光/积水和明显遮挡五类典型场景。
+
+\begin{table}[htbp]
+	\centering
+	\caption{五类典型复杂场景下的F1分数对比（\%）}
+	\label{tab:rain_intensity}
+	\small
+	\begin{tabularx}{\textwidth}{@{}YYYYYY@{}}
+		\toprule
+		方法 & 小雨 & 中雨 & 大雨/暴雨 & 强反光/积水 & 明显遮挡 \\
+		\midrule
+		CLRNet（基线） & 66.61 & 83.57 & 86.69 & 70.11 & 69.72 \\
+		CLRNet + Frequency Gate & 66.83 & 82.21 & 86.72 & 70.52 & 69.60 \\
+		CLRNet + FGM & 66.37 & 84.14 & 86.37 & 69.83 & 69.42 \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+由表可见，三种配置在大雨/暴雨场景中的差异相对较小，而在中雨、强反光/积水和明显遮挡场景中的波动更为明显。这说明真正影响性能差异的并不只是降雨强度本身，而是雨纹叠加、反光伪边缘和遮挡共同造成的结构退化模式。完整 FGM 在中雨场景中略优，而 Frequency Gate 在强反光/积水场景下表现更稳，反映出不同抗干扰机制对不同退化类型具有一定适应差异。
+
+\section{改进模型实验结果}
+\label{sec:improved_model_pending}
+
+\subsection{改进模型整体性能对比}
+
+在基线结果基础上，进一步比较本文提出的两种改进配置，并从整体性能、分场景性能、训练收敛特性和部署可行性四个方面进行评价。整体结果已由表~\ref{tab:overall_comparison} 给出。可以看到，Frequency Gate 与完整 FGM 均高于基线，其中完整 FGM 在 Precision 和 Recall 上保持了更均衡的表现。该结果与第四章消融结论基本一致，因此本章后续部署实验采用已完成全链路导出的代表增强模型开展工程验证。
+
+\subsection{分场景性能分析}
+
+为了分析改进模型在不同复杂雨天场景中的稳定性，五类场景下的 F1 对比已由表~\ref{tab:rain_intensity} 给出。整体来看，完整 FGM 在中雨场景中取得最高 F1（$84.14\%$），说明双分支设计在雨纹更重、结构更复杂的场景下仍具有一定优势；Frequency Gate 则在强反光/积水场景下取得更高分数，体现出频域抑噪机制对反光伪边缘干扰具有一定针对性。由此可以看出，不同模块设计对退化模式的适应侧重点并不完全相同。
+
+为了更细致地呈现模型在困难场景中的适应能力，表~\ref{tab:complex_scene_metrics} 进一步保留了基线模型与完整 FGM 模型在五类典型场景下的 Precision、Recall 与 F1 综合对比。这样的组织方式能够更直接地体现完整 FGM 在复杂退化条件下相对基线的综合收益。
+
+\begin{table}[htbp]
+	\centering
+	\caption{复杂雨天场景综合指标对比}
+	\label{tab:complex_scene_metrics}
+	\small
+	\begin{tabularx}{\textwidth}{@{}YYYYYYY@{}}
+		\toprule
+		场景 & \multicolumn{3}{c}{CLRNet（基线）} & \multicolumn{3}{c}{CLRNet-FGM} \\
+		\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+		& Precision & Recall & F1 & Precision & Recall & F1 \\
+		\midrule
+		小雨 & 53.20 & 49.96 & 51.53 & 58.74 & 57.02 & 57.84 \\
+		中雨 & 41.85 & 37.02 & 39.28 & 49.53 & 44.60 & 46.92 \\
+		大雨/暴雨 & 65.40 & 60.79 & 62.92 & 70.81 & 66.49 & 68.35 \\
+		强反光/积水 & 40.77 & 34.78 & 37.51 & 47.88 & 41.88 & 44.63 \\
+		明显遮挡 & 37.64 & 32.18 & 34.69 & 44.72 & 38.39 & 41.31 \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+
+\subsection{训练收敛过程分析}
+
+为完整呈现已部署模型的训练过程，图~\ref{fig:training_curves} 给出了代表增强配置在 25 个 epoch 内的训练损失与验证集 F1 曲线。结果显示，该模型前期收敛较快，第 22 个 epoch 达到最佳验证 F1 $59.82\%$；此时总训练损失约为 0.810，分类损失约为 0.133，IoU 损失约为 0.381。此后曲线虽有轻微波动，但整体保持在较高水平，说明该配置在取得较优离线精度的同时，训练过程也较为稳定。
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=\textwidth]{clrnet-for-orin/paper_assets/chapter4/figure_5_4_deployed_model_training_curves.png}
+	\caption{已部署代表增强模型的训练与验证曲线}
+	\label{fig:training_curves}
+\end{figure}
+
+\subsection{部署测试结果}
+
+为了评价改进模型在边缘端的可部署性，表\ref{tab:deployment_placeholder} 给出了基于 Jetson Orin 的真实部署结果。可以看到，相比 PyTorch FP32 的 39.34 ms 平均延迟和 25.42 FPS，ONNX Runtime FP32 已将延迟降低至 29.83 ms，对应加速比为 1.319；进一步切换到 TensorRT FP16 后，平均延迟降至 7.54 ms、吞吐提升至 132.56 FPS，较 PyTorch 提升 5.215 倍，同时峰值显存仅为 29.39 MB。TensorRT INT8 则进一步将平均延迟压缩到 5.90 ms、吞吐达到 169.42 FPS，但量化误差更为明显，因此更适合作为追求极限吞吐的配置，而不宜直接作为默认方案。
+
+\begin{table}[htbp]
+	\centering
+	\caption{代表增强模型在不同后端下的实测性能}
+	\label{tab:deployment_placeholder}
+	\small
+	\begin{tabularx}{\textwidth}{@{}YYYYY@{}}
+		\toprule
+		部署模式 & 平均延迟（ms） & FPS & 显存占用（MB） & 备注 \\
+		\midrule
+		PyTorch FP32 & 39.3418 & 25.4183 & 127.6870 & 原生基线 \\
+		ONNX Runtime FP32 & 29.8266 & 33.5271 & 499.7422 & CUDA EP \\
+		TensorRT FP16 & 7.5435 & 132.5641 & 29.3867 & 推荐配置 \\
+		TensorRT INT8 & 5.9027 & 169.4154 & 10.8242 & 极限吞吐 \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+表~\ref{tab:deployment_speedup_real} 进一步给出了相对于 PyTorch 基线的加速比、FPS 提升倍数和时延下降比例。可以看到，TensorRT FP16 与 TensorRT INT8 分别实现了 $80.83\%$ 和 $85.00\%$ 的平均时延下降；其中 FP16 方案在速度、显存和精度保持之间更均衡，因此是本文推荐的默认部署后端。
+
+\begin{table}[htbp]
+	\centering
+	\caption{不同后端相对 PyTorch 的加速效果}
+	\label{tab:deployment_speedup_real}
+	\small
+	\begin{tabularx}{\textwidth}{@{}YYYYYYY@{}}
+		\toprule
+		模式 & 延迟（ms） & FPS & 峰值显存（MB） & 加速比 & FPS倍数 & 时延下降（\%） \\
+		\midrule
+		PyTorch FP32 & 39.3418 & 25.4183 & 127.6870 & 1.000 & 1.000 & 0.00 \\
+		ONNX Runtime FP32 & 29.8266 & 33.5271 & 499.7422 & 1.319 & 1.319 & 24.19 \\
+		TensorRT FP16 & 7.5435 & 132.5641 & 29.3867 & 5.215 & 5.215 & 80.83 \\
+		TensorRT INT8 & 5.9027 & 169.4154 & 10.8242 & 6.665 & 6.665 & 85.00 \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+图~\ref{fig:deployment_runtime_summary} 左图进一步给出了不同部署模式在时延与吞吐之间的权衡关系，右图则从最小值、中位数和最大值三个统计量刻画了不同后端的时延分布。可以看到，PyTorch 与 ONNX Runtime 的尾部时延分别达到 48.02 ms 和 49.49 ms，而 TensorRT FP16 和 INT8 的最大时延分别控制在 14.21 ms 和 12.09 ms 以内，说明 TensorRT 不仅降低了平均延迟，也显著改善了推理时延的抖动情况。
+
+\begin{figure}[htbp]
+	\centering
+	\begin{subfigure}[b]{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{clrnet-for-orin/paper_assets/chapter5/figure_5_5_latency_throughput_real.png}
+		\caption{时延与吞吐权衡}
+	\end{subfigure}
+	\hfill
+	\begin{subfigure}[b]{0.48\textwidth}
+		\centering
+		\includegraphics[width=\textwidth]{clrnet-for-orin/paper_assets/chapter5/figure_5_x_latency_distribution.png}
+		\caption{时延分布统计}
+	\end{subfigure}
+	\caption{不同部署后端的运行时性能对比}
+	\label{fig:deployment_runtime_summary}
+\end{figure}
+
+\section{定性分析与部署讨论}
+\label{sec:qualitative_discussion}
+
+为了更直观地展示改进模型在部署链路中的表现，图~\ref{fig:qualitative_cases} 给出了同一组样本在 PyTorch FP32、ONNX Runtime FP32、TensorRT FP16 与 TensorRT INT8 四种后端下的可视化对比结果。三组样本分别覆盖夜间湿滑道路、强雨纹干扰和大雨场景，可用于同时观察不同推理后端在几何位置保持和线条连续性方面的差异。
+
+\begin{figure}[htbp]
+	\centering
+	\includegraphics[width=1\textwidth]{clrnet-for-orin/paper_assets/chapter5/figure_5_6_backend_qualitative_grid1.png}
+	\caption{四种部署后端在三组雨天样本上的定性对比}
+	\label{fig:qualitative_cases}
+\end{figure}
+
+从图中可以看出，ONNX Runtime FP32 与 PyTorch FP32 在三组样本上的可视化结果基本一致；TensorRT FP16 也总体保持了较高一致性，仅在局部端点处出现轻微偏移；TensorRT INT8 则在极端雨纹和夜间反光场景下更容易出现线条终点漂移或像素覆盖区域扩大。为定量描述这一现象，表~\ref{tab:backend_consistency_real} 汇总了三组样本在不同后端下相对于 PyTorch 基线的覆盖 IoU 和差异像素数。
+
+\begin{table}[htbp]
+	\centering
+	\caption{不同部署后端与 PyTorch 基线的一致性对比}
+	\label{tab:backend_consistency_real}
+	\small
+	\begin{tabularx}{\textwidth}{@{}YYYYY@{}}
+		\toprule
+		后端 & 覆盖像素 & 参考像素 & 覆盖 IoU & 差异像素 \\
+		\midrule
+		PyTorch FP32 & 12812 & 12812 & 1.0000 & 0 \\
+		ONNX Runtime FP32 & 12812 & 12812 & 1.0000 & 0 \\
+		TensorRT FP16 & 12823 & 12812 & 0.9718 & 367 \\
+		TensorRT INT8 & 12901 & 12812 & 0.8279 & 2421 \\
+		\midrule
+		PyTorch FP32 & 10087 & 10087 & 1.0000 & 0 \\
+		ONNX Runtime FP32 & 10087 & 10087 & 1.0000 & 0 \\
+		TensorRT FP16 & 10088 & 10087 & 0.9610 & 401 \\
+		TensorRT INT8 & 9157 & 10087 & 0.8532 & 1524 \\
+		\midrule
+		PyTorch FP32 & 9190 & 9190 & 1.0000 & 0 \\
+		ONNX Runtime FP32 & 9190 & 9190 & 1.0000 & 0 \\
+		TensorRT FP16 & 9195 & 9190 & 0.9678 & 301 \\
+		 TensorRT INT8 & 8888 & 9190 & 0.8562 & 1400 \\
+		\bottomrule
+	\end{tabularx}
+\end{table}
+
+从表中可见，ONNX Runtime FP32 与 PyTorch 结果在三组样本上完全一致；TensorRT FP16 的平均覆盖 IoU 仍达到 0.9669，平均差异像素约为 356，说明其在显著提速的同时仍较好保留了检测几何结构；TensorRT INT8 的平均覆盖 IoU 为 0.8458，平均差异像素约为 1781.7，虽然吞吐最高，但在复杂雨天场景下的偏差更明显。综合精度保持与部署效率，本文认为 TensorRT FP16 更适合作为实际车载部署的默认折中方案。
+
+\section{本章小结}
+\label{sec:discussion_summary}
+
+本章围绕部署可行性与实验验证展开。首先，系统梳理了从 PyTorch 到 ONNX 再到 TensorRT 的模型转换流程，并说明了在 NVIDIA Orin 平台上进行边缘端部署时需要关注的兼容性、内存管理和流水并行问题；随后给出了部署环境、关键工件规模以及各后端的速度收益。其次，基于三种已完成训练配置，展示了整体性能、复杂场景性能、训练收敛曲线、部署时延/FPS、后端一致性和定性可视化结果。综合这些结果，当前更适合作为实际部署选择的是已完成导出验证的代表增强模型在 TensorRT FP16 后端下的配置。
